@@ -959,7 +959,7 @@ class RequestParameters(BaseModel):
             return v
         return v
 
-    def to_api_params(self) -> dict[str, Any]:
+    def to_api_params(self) -> Dict[str, Any]:
         """Serializes the model into a dictionary formatted for httpx
         query parameters.
 

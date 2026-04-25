@@ -35,8 +35,13 @@ jobs:
       - name: Strict Type Checking with Mypy
         run: mypy src/
 
-      - name: Run Tests with Pytest
-        run: pytest
+      - name: Run tests
+        run: pytest --cov --cov-branch --cov-report=xml
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ---------------------------------------------------------
   # Build & Publish to PyPI (Runs ONLY on Releases)

@@ -1,7 +1,7 @@
 site_name: scrape-do-python
 site_url: https://svdc1.github.io/scrape-do-python
 repo_url: https://github.com/svdC1/scrape-do-python
-repo_name: svdC1/scrape-do-pythons
+repo_name: svdC1/scrape-do-python
 theme:
   name: material
   font:
