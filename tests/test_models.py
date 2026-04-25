@@ -13,7 +13,8 @@ from scrape_do.models import (
     ScrollToAction,
     ScrollXAction,
     ScrollYAction,
-    WaitForRequestCompletionAction
+    WaitForRequestCompletionAction,
+    PreparedScrapeDoRequest
     )
 
 from scrape_do.constants import (
@@ -22,7 +23,9 @@ from scrape_do.constants import (
     _ZIPCODE_FORMATS
     )
 
+# ---------------------------
 # --- BrowserAction Tests ---
+# ---------------------------
 
 
 def test_browser_action_string_boundaries():
@@ -81,7 +84,10 @@ def test_screenshot_action_internal_conflict():
             particular_screenshot="#hero-banner"
         )
 
+# --------------------------------
 # --- Request Parameters Tests ---
+# --------------------------------
+
 
 # --- Serialization Tests ---
 
@@ -657,3 +663,165 @@ def test_integer_boundary_constraints():
                         render=True,
                         **field
                         )
+
+# -------------------------------------
+# --- PreparedScrapeDoRequest Tests ---
+# -------------------------------------
+
+
+def test_prepared_request_head_render():
+    """
+    Ensures the HEAD + Headless Browser anti-pattern is blocked.
+    """
+    params = RequestParameters(url="https://example.com", render=True)
+
+    with pytest.raises(
+        ValueError,
+        match="architectural anti-pattern"
+    ):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            method="HEAD"
+        )
+
+
+def test_prepared_request_orphaned_headers():
+    """
+    Ensures passing headers without enabling a header flag throws an error.
+    """
+    params = RequestParameters(url="https://example.com")
+
+    with pytest.raises(
+        ValueError,
+        match="no header routing flag"
+    ):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            headers={"Authorization": "Bearer secret"}
+        )
+
+
+def test_prepared_request_missing_headers_for_flag():
+    """
+    Ensures enabling a header flag without providing headers throws an error.
+    """
+    params = RequestParameters(url="https://example.com", custom_headers=True)
+
+    with pytest.raises(ValueError, match="no 'headers' were provided"):
+        PreparedScrapeDoRequest(
+            api_params=params,
+        )
+
+
+def test_prepared_request_invalid_extra_headers():
+    """
+    Ensures extra_headers enforce the strict 'sd-' prefix rule.
+    """
+    params = RequestParameters(url="https://example.com", extra_headers=True)
+
+    with pytest.raises(ValueError, match="prefixed with 'sd-'"):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            headers={
+                "sd-Authorization": "Bearer secret",
+                "User-Agent": "MyBot"
+            }
+        )
+
+
+def test_prepared_request_valid_extra_headers():
+    """
+    Ensures properly prefixed extra_headers pass validation.
+    """
+    params = RequestParameters(url="https://example.com", extra_headers=True)
+
+    req = PreparedScrapeDoRequest(
+        api_params=params,
+        headers={"sd-User-Agent": "MyBot", "sd-Accept": "application/json"}
+    )
+
+    assert req.headers["sd-User-Agent"] == "MyBot"
+
+
+def test_prepared_request_get_body_warning():
+    """
+    Ensures supplying a payload body with a GET request raises a UserWarning.
+    """
+    params = RequestParameters(url="https://example.com")
+
+    with pytest.warns(
+        UserWarning,
+        match="violates standard HTTP specifications"
+    ):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            method="GET",
+            body={"search": "shoes"},
+            payload_type="json"
+        )
+
+
+def test_prepared_request_payload_routing():
+    """
+    Ensures payloads are routed to the correct httpx argument based on
+    payload_type.
+    """
+    params = RequestParameters(url="https://example.com")
+
+    # Test Form Data Routing
+    req_form = PreparedScrapeDoRequest(
+        api_params=params,
+        method="POST",
+        body={"user": "test"},
+        payload_type="form"
+    )
+    assert "data" in req_form.to_httpx_kwargs()
+
+    # Test JSON Routing
+    req_json = PreparedScrapeDoRequest(
+        api_params=params,
+        method="POST",
+        body={"user": "test"},
+        payload_type="json"
+    )
+    assert "json" in req_json.to_httpx_kwargs()
+
+    # Test Raw Bytes Routing
+    req_raw = PreparedScrapeDoRequest(
+        api_params=params,
+        method="POST",
+        body=b"raw_bytes",
+        payload_type="raw"
+    )
+    assert "content" in req_raw.to_httpx_kwargs()
+
+
+def test_prepared_request_payload_type_mismatch():
+    """
+    Ensures mismatched bodies and payload_types crash before execution.
+    """
+    params = RequestParameters(url="https://example.com")
+
+    # Trying to send a string when payload_type is "json"
+    with pytest.raises(
+        ValueError,
+        match="must be a Python dictionary"
+    ):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            method="POST",
+            body="<xml></xml>",
+            payload_type="json"
+        )
+
+    # Trying to send a dictionary when payload_type is "raw"
+    with pytest.raises(
+        ValueError,
+        match="must be a string or bytes"
+    ):
+        PreparedScrapeDoRequest(
+            api_params=params,
+            method="POST",
+            body={"key": "value"},
+            payload_type="raw"
+        )
