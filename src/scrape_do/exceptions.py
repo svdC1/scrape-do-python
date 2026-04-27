@@ -1,122 +1,140 @@
-"""Custom exception hierarchy for the SDK
+"""Custom exception hierarchy and network error routing for the Scrape.do SDK.
 
-These exceptions translate generic HTTP errors into domain-specific,
-catchable Python exceptions, allowing developers to implement granular
-retry logic and error handling.
+Dynamically parses API failures, distinguishes proxy infrastructure errors
+from target website blocks, and exposes programmatic flags for retry
+strategies.
 """
 
-from typing import Optional
+import httpx
 
 
 class ScrapeDoError(Exception):
     """The base exception for all errors raised by the SDK.
 
-    Catching this exception will catch any error originating from the SDK.
+    Catching this exception guarantees that any error originating strictly
+    from the SDK or the proxy network is handled.
     """
     pass
 
 
 class APIConnectionError(ScrapeDoError):
-    """Raised when the SDK fails to connect to the Scrape.do API entirely.
+    """Raised when the SDK fails to connect to the Scrape.do gateway entirely.
 
-    This indicates a network-level issue (e.g., DNS resolution failure,
-    local internet outage, or a hard timeout) rather than an HTTP error.
-    """
-    pass
-
-
-class APIResponseError(ScrapeDoError):
-    """The base exception for all non-2xx responses from the Scrape.do API.
-
-    Attributes:
-        status_code (int): The HTTP status code returned by the API.
-        response_body (str): The raw text of the API response.
-        message (str): The parsed human-readable error message.
-    """
-    def __init__(
-        self,
-        status_code: int,
-        response_body: str,
-        message: Optional[str] = None
-    ):
-        default_msg = (
-            f"Scrape.do API returned an error. "
-            f"Status: {status_code} | Body: {response_body}"
-            )
-        msg = message or default_msg
-        super().__init__(msg)
-        self.status_code = status_code
-        self.response_body = response_body
-        self.message = msg
-
-
-class AuthenticationError(APIResponseError):
-    """Raised when the API returns a 401 Unauthorized.
-
-    Indicates that the provided API token is missing, invalid, or expired.
-
-    Attributes:
-        status_code (int): The HTTP status code returned by the API.
-        response_body (str): The raw text of the API response.
-        message (str): The parsed human-readable error message.
-    """
-    def __init__(self, status_code: int, response_body: str):
-        msg = "Authentication failed. Please verify your Scrape.do API token."
-        super().__init__(
-            status_code=status_code,
-            response_body=response_body,
-            message=msg
-        )
-
-
-class BadRequestError(APIResponseError):
-    """Raised when the API returns a 400 Bad Request.
-
-    Indicates that while the SDK's local validation passed, the Scrape.do
-    servers rejected the request configuration or the target URL structure.
-    """
-    pass
-
-
-class RateLimitError(APIResponseError):
-    """Raised when the API returns a 429 Too Many Requests.
-
-    Indicates that the account has exceeded its concurrent request limit
-    or overall bandwidth quota.
-
-    Attributes:
-        status_code (int): The HTTP status code returned by the API.
-        response_body (str): The raw text of the API response.
-        message (str): The parsed human-readable error message.
-    """
-    def __init__(self, status_code: int, response_body: str):
-        super().__init__(
-            status_code,
-            response_body,
-            "Rate limit exceeded for Scrape.do account."
-        )
-
-
-class ServerError(APIResponseError):
-    """Raised when the API returns a 5xx status code.
-
-    Indicates a server-side issue at Scrape.do (e.g., proxy pool outage).
+    This indicates a network-level failure such as DNS resolution issues,
+    local internet outages, or hard socket timeouts.
     """
     pass
 
 
 class TargetError(ScrapeDoError):
-    """Raised when Scrape.do connects, but the target website fails.
-    This is commonly used when `transparent_response=True` is set and the
-    target website returns a 403 Forbidden (proxy blocked) or 404 Not Found.
+    """Raised when the Scrape.do proxy connects, but the target website fails.
 
-    Attributes:
+    This exception is triggered when `transparent_response=True` is used,
+    explicitly flagging that the destination URL returned a non-2xx status
+    code.
+
+    Args:
         target_status_code (int): The HTTP status code returned by the target
             website.
-        message (str): The parsed human-readable error message.
+        message (str): The raw response body or error message from the target.
     """
+
     def __init__(self, target_status_code: int, message: str):
         self.target_status_code = target_status_code
         super().__init__(
             f"Target website returned status {target_status_code}: {message}"
             )
+
+    @property
+    def is_waf_block(self) -> bool:
+        """
+        Programmatic flag to identify if the target website blocked the proxy.
+
+        Returns:
+            `True` if status code is either `401` or `403`, `False` otherwise
+        """
+        return self.target_status_code in (401, 403)
+
+    @property
+    def is_throttled(self) -> bool:
+        """
+        Programmatic flag to identify target-level rate limiting.
+
+        Returns:
+            `True` if status code is `429`, `False` otherwise
+        """
+        return self.target_status_code == 429
+
+
+class AuthenticationThrottleError(ScrapeDoError):
+    """Raised when high-frequency invalid requests trigger an authentication
+    ban.
+    """
+    pass
+
+
+class APIResponseError(ScrapeDoError):
+    """Dynamically parses and represents a Scrape.do API infrastructure error.
+
+    This acts as the base exception for all non-2xx HTTP responses returned
+    by the Scrape.do gateway. It parses the JSON payloads to extract
+    human-readable error messages.
+
+    Args:
+        response (httpx.Response): The raw HTTP response object.
+    """
+
+    def __init__(self, response: httpx.Response):
+        self.response = response
+        self.status_code = response.status_code
+        self.message = f"Unknown API Error. Body: {response.text}"
+
+        # Attempt to parse known JSON keys
+        try:
+            data = response.json()
+            for key in ("detail", "Error", "errorMessage", "message"):
+                if key in data and isinstance(data[key], str):
+                    self.message = data[key]
+                    break
+
+        except ValueError:
+            pass
+
+        super().__init__(
+            f"API returned an error."
+            f"Status: {self.status_code} | Message: {self.message}"
+            )
+
+
+# --- Specific API Response Subclasses ---
+
+class AuthenticationError(APIResponseError):
+    """Raised when the API returns an HTTP 401 (Unauthorized).
+
+    Indicates that the provided API token is missing or invalid.
+    """
+    pass
+
+
+class BadRequestError(APIResponseError):
+    """Raised when the API returns an HTTP 400 (Bad Request).
+
+    Indicates that the Scrape.do servers rejected the request configuration.
+    """
+    pass
+
+
+class RateLimitError(APIResponseError):
+    """Raised when the API returns an HTTP 429 (Too Many Requests).
+
+    Indicates that the account has exceeded its concurrent request limit.
+    """
+    pass
+
+
+class ServerError(APIResponseError):
+    """Raised when the API returns an HTTP 500+ status code.
+
+    Indicates a gateway failure or proxy pool outage.
+    """
+    pass

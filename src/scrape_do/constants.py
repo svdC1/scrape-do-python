@@ -11,7 +11,17 @@ Attributes:
     _ZIPCODE_FORMATS (dict[str, re.Pattern]): Pre-compiled regular expressions
         mapping lowercase country codes to their strict regional postal code
         formats.
+
+    _SUPER_ONLY_COUNTRIES (set[str]): ISO 3166-1 alpha-2 country codes
+        supported only when `super=True`
+
+    _ZIPCODE_ALLOWED_COUNTRIES (set[str]): Set of country codes for which the
+        `postal_code` parameter is allowed
+
+    _ZIPCODE_NOT_ALLOWED_COUNTRIES (set[str]): Set of country codes for which
+        the `postal_code` parameter is not allowed
 """
+
 import re
 
 
@@ -62,3 +72,13 @@ _ZIPCODE_FORMATS = {
     "br": re.compile(r"^(\d{5}|\d{8})$"),
     "jp": re.compile(r"^\d{3}-?\d{4}$")
     }
+
+_SUPER_ONLY_COUNTRIES = {c for c in _SUPER_SUPPORTED_COUNTRIES
+                         if c not in _DATACENTER_SUPPORTED_COUNTRIES
+                         }
+
+_ZIPCODE_ALLOWED_COUNTRIES = set(_ZIPCODE_FORMATS.keys())
+
+_ZIPCODE_NOT_ALLOWED_COUNTRIES = {c for c in _SUPER_SUPPORTED_COUNTRIES
+                                  if c not in _ZIPCODE_ALLOWED_COUNTRIES
+                                  }
