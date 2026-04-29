@@ -987,7 +987,7 @@ class RequestParameters(BaseModel):
         for key, value in params.items():
 
             # Serialize playWithBrowserActions
-            if key == "playWithBrowser":
+            if key == "playWithBrowser" and self.play_with_browser:
                 actions = []
                 for action in self.play_with_browser:
                     a_dict = action.model_dump(
@@ -1728,6 +1728,8 @@ class ScrapeDoResponse:
                 return None
             cookie_dict = {n: v for n, v in matches}
             return httpx.Cookies(cookie_dict)
+
+        return None
 
     # --- Scrape.do JSON ---
 
