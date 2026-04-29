@@ -362,21 +362,39 @@ class TestRequestParametersValidation:
 
 class TestScrapeDoPreparedRequest:
 
+    @pytest.mark.parametrize(
+        "method",
+        ["GET",
+         "POST",
+         "PUT",
+         "PATCH",
+         "DELETE",
+         "HEAD",
+         "OPTIONS"
+         ]
+    )
     @staticmethod
-    def test_head_render(example_url):
+    def test_render_method(method, example_url):
         """
-        Ensures that HEAD + Headless Browser is blocked.
+        Ensures that only the "GET" method is allowed when `render=True`
         """
         params = RequestParameters(url=example_url, render=True)
 
-        with pytest.raises(
-            ValidationError,
-            match="architectural anti-pattern"
-        ):
+        if method == "GET":
             PreparedScrapeDoRequest(
                 api_params=params,
-                method="HEAD"
+                method=method
             )
+        else:
+
+            with pytest.raises(
+                ValidationError,
+                match="'GET' method"
+            ):
+                PreparedScrapeDoRequest(
+                    api_params=params,
+                    method=method
+                )
 
     @staticmethod
     def test_get_body_warning(example_url):

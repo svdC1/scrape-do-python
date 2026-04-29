@@ -104,8 +104,8 @@ class TestRequestParametersSerialization:
           {"Action": "ScreenShot"}
           ),
          (ScreenShotAction,
-          {"full_screenshot": True},
-          {"Action": "ScreenShot", "fullScreenShot": True}
+          {"full_screenshot": "true"},
+          {"Action": "ScreenShot", "fullScreenShot": "true"}
           ),
          (ScreenShotAction,
           {"particular_screenshot": "#example"},
