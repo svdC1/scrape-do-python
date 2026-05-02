@@ -151,7 +151,7 @@ class APIResponseError(ScrapeDoError):
     ):
         self.raw_response = raw_response
         self.raw_status_code = raw_response.status_code
-        self.message = f"Unknown API Error. Body: {response.text}"
+        self.message = f"Unknown API Error. Body: {raw_response.text}"
 
         # Attempt to parse known JSON keys
         try:
@@ -232,10 +232,12 @@ class RotatedSessionError(ScrapeDoError):
         raw_response: httpx.Response,
         request: PreparedScrapeDoRequest,
         response: ScrapeDoResponse,
-        last_known_rid: str
+        last_known_rid: str,
+        new_rid: str,
+        session_id: int,
     ):
-        self.new_rid = response.rid
-        self.session_id = request.api_params.session_id
+        self.new_rid = new_rid
+        self.session_id = session_id
         self.last_known_rid = last_known_rid
         self.raw_response = raw_response
         msg = (f"The Scrape.do session for `sessionId={self.session_id}` has"

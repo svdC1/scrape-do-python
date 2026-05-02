@@ -1059,7 +1059,11 @@ class RequestParameters(BaseModel):
 
         parsed = urllib.parse.urlparse(api_url)
         query_params = urllib.parse.parse_qs(parsed.query)
-        flat_params = {k: v[0] for k, v in query_params.items()}
+        # Type parsed params as Dict[str, Any] and let Pydantic raise a
+        # ValidationError if it can't coerce a specific value
+        flat_params: Dict[str, Any] = {
+            k: v[0] for k, v in query_params.items()
+            }
 
         # Reconstruct the nested JSON actions if they exist
         if "playWithBrowser" in flat_params:
@@ -2094,11 +2098,13 @@ class ScrapeDoResponse:
                 )
 
         # If is_proxy_error is False, then it's a TargetError
+
+        status_code = self.target_status_code or self._raw_response.status_code
         raise TargetError(
             (f"Target rejected request with status: "
-             f"{self.target_status_code}"
+             f"{status_code}"
              ),
-            self.target_status_code,
+            status_code,
             self._raw_response,
             self._raw_request,
             self
