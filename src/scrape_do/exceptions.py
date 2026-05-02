@@ -5,7 +5,12 @@ from target website blocks, and exposes programmatic flags for retry
 strategies.
 """
 
+from __future__ import annotations
 import httpx
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from scrape_do.models import PreparedScrapeDoRequest, ScrapeDoResponse
 
 
 class ScrapeDoError(Exception):
@@ -13,8 +18,26 @@ class ScrapeDoError(Exception):
 
     Catching this exception guarantees that any error originating strictly
     from the SDK or the proxy network is handled.
+
+    Args:
+        message (str): Error message to be displayed
+        request (Optional[PreparedScrapeDoRequest]): Object containing the
+            request's information if it exists, otherwise `None`.
+        response (Optional[ScrapeDoResponse]): Object containing the response's
+            information if it exists, otherwise `None`
     """
-    pass
+    def __init__(
+        self,
+        message: str,
+        request: Optional[PreparedScrapeDoRequest] = None,
+        response: Optional[ScrapeDoResponse] = None
+    ):
+        super().__init__(message)
+        self.message = message
+        self.request = request
+        self.response = response
+        if response is not None:
+            self.status_code = response.target_status_code
 
 
 class APIConnectionError(ScrapeDoError):
@@ -23,7 +46,6 @@ class APIConnectionError(ScrapeDoError):
     This indicates a network-level failure such as DNS resolution issues,
     local internet outages, or hard socket timeouts.
     """
-    pass
 
 
 class TargetError(ScrapeDoError):
@@ -34,15 +56,30 @@ class TargetError(ScrapeDoError):
     code.
 
     Args:
+        message (str): The raw response body or error message from the target.
         target_status_code (int): The HTTP status code returned by the target
             website.
-        message (str): The raw response body or error message from the target.
+        raw_response (httpx.Response): The raw HTTP response object.
+        request (Optional[PreparedScrapeDoRequest]): Object containing the
+            request's information if it exists, otherwise `None`.
+        response (Optional[ScrapeDoResponse]): Object containing the response's
+            information if it exists, otherwise `None`
     """
 
-    def __init__(self, target_status_code: int, message: str):
+    def __init__(
+        self,
+        message: str,
+        target_status_code: int,
+        raw_response: httpx.Response,
+        request: Optional[PreparedScrapeDoRequest] = None,
+        response: Optional[ScrapeDoResponse] = None
+    ):
         self.target_status_code = target_status_code
+        self.raw_response = raw_response
         super().__init__(
-            f"Target website returned status {target_status_code}: {message}"
+            f"Target website returned status {target_status_code}: {message}",
+            request,
+            response
             )
 
     @property
@@ -69,8 +106,26 @@ class TargetError(ScrapeDoError):
 class AuthenticationThrottleError(ScrapeDoError):
     """Raised when high-frequency invalid requests trigger an authentication
     ban.
+
+    Args:
+        raw_response (httpx.Response): The raw HTTP response object.
+        request (Optional[PreparedScrapeDoRequest]): Object containing the
+            request's information if it exists, otherwise `None`.
+        response (Optional[ScrapeDoResponse]): Object containing the response's
+            information if it exists, otherwise `None`
     """
-    pass
+    def __init__(
+        self,
+        raw_response: httpx.Response,
+        request: Optional[PreparedScrapeDoRequest] = None,
+        response: Optional[ScrapeDoResponse] = None
+    ):
+        msg = ("Your request has been temporarily throttled by the"
+               "authentication server."
+               )
+        self.raw_response = raw_response
+
+        super().__init__(msg, request, response)
 
 
 class APIResponseError(ScrapeDoError):
@@ -81,18 +136,32 @@ class APIResponseError(ScrapeDoError):
     human-readable error messages.
 
     Args:
-        response (httpx.Response): The raw HTTP response object.
+        raw_response (httpx.Response): The raw HTTP response object.
+        request (Optional[PreparedScrapeDoRequest]): Object containing the
+            request's information if it exists, otherwise `None`.
+        response (Optional[ScrapeDoResponse]): Object containing the response's
+            information if it exists, otherwise `None`
     """
 
-    def __init__(self, response: httpx.Response):
-        self.response = response
-        self.status_code = response.status_code
+    def __init__(
+        self,
+        raw_response: httpx.Response,
+        request: Optional[PreparedScrapeDoRequest] = None,
+        response: Optional[ScrapeDoResponse] = None
+    ):
+        self.raw_response = raw_response
+        self.raw_status_code = raw_response.status_code
         self.message = f"Unknown API Error. Body: {response.text}"
 
         # Attempt to parse known JSON keys
         try:
-            data = response.json()
-            for key in ("detail", "Error", "errorMessage", "message"):
+            data = raw_response.json()
+            for key in ("detail",
+                        "Error",
+                        "errorMessage",
+                        "message",
+                        "Message"
+                        ):
                 if key in data and isinstance(data[key], str):
                     self.message = data[key]
                     break
@@ -101,8 +170,12 @@ class APIResponseError(ScrapeDoError):
             pass
 
         super().__init__(
-            f"API returned an error."
-            f"Status: {self.status_code} | Message: {self.message}"
+            (
+                f"API returned an error."
+                f"Status: {self.raw_status_code} | Message: {self.message}"
+                ),
+            request,
+            response
             )
 
 
@@ -138,3 +211,35 @@ class ServerError(APIResponseError):
     Indicates a gateway failure or proxy pool outage.
     """
     pass
+
+
+class RotatedSessionError(ScrapeDoError):
+    """Raised when Scrape.do rotates the underlying proxy node for an active
+    session.
+
+    Args:
+        raw_response (httpx.Response): The raw HTTPX response object
+        request (PreparedScrapeDoRequest): The original request configuration.
+        response (ScrapeDoResponse): The successful HTTP response containing
+            the new RID state.
+        last_known_rid (str): The RID found in the response of the last
+            successful request made with the `request.api_params.session_id`
+            parameter by the `ScrapeDoClient` instance before it raised the
+            exception
+    """
+    def __init__(
+        self,
+        raw_response: httpx.Response,
+        request: PreparedScrapeDoRequest,
+        response: ScrapeDoResponse,
+        last_known_rid: str
+    ):
+        self.new_rid = response.rid
+        self.session_id = request.api_params.session_id
+        self.last_known_rid = last_known_rid
+        self.raw_response = raw_response
+        msg = (f"The Scrape.do session for `sessionId={self.session_id}` has"
+               f" expired | Last Known RID: {last_known_rid} | "
+               f"Current RID: {self.new_rid}"
+               )
+        super().__init__(msg, request, response)

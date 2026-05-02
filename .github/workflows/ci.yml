@@ -36,10 +36,16 @@ jobs:
         run: mypy src/
 
       - name: Run tests
-        run: pytest --cov --cov-branch --cov-report=xml
+        run: pytest --cov=scrape_do --cov-branch --junitxml=junit.xml
 
-      - name: Upload results to Codecov
+      - name: Upload Coverage To Codecov
         uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload Test Results To Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 

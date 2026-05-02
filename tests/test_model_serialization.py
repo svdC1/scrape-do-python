@@ -1,5 +1,6 @@
 import pytest
 import json
+import httpx
 from scrape_do.models import (
     ClickAction,
     WaitAction,
@@ -11,7 +12,9 @@ from scrape_do.models import (
     ScrollYAction,
     ExecuteAction,
     WaitForRequestCompletionAction,
-    RequestParameters
+    RequestParameters,
+    ScrapeDoResponse,
+    PreparedScrapeDoRequest
     )
 
 
@@ -248,3 +251,84 @@ class TestRequestParametersSerialization:
         expected_payload = {"url": example_url, "super": "true"}
         expected_payload.update(expected_dict)
         assert payload == expected_payload
+
+
+class TestScrapeDoResponseSerialization:
+
+    @staticmethod
+    def test_lazy_json_parsing_nested_models(example_url, mock_json_payload):
+        """
+        Validates that the model correctly deserializes camelCase JSON payloads
+        into Pydantic models.
+        """
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True
+                ),
+            method="GET"
+        )
+
+        http_resp = httpx.Response(200, json=mock_json_payload)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        # Network Requests Extraction
+        net_reqs = response.network_requests
+        assert net_reqs is not None
+        assert len(net_reqs) == 1
+        assert str(net_reqs[0].url) == "https://example.com/api"
+        assert net_reqs[0].method == "POST"
+
+        # WebSocket Extraction
+        ws_reqs = response.websocket_requests
+        assert ws_reqs is not None
+        assert len(ws_reqs) == 1
+        assert ws_reqs[0].type == "received"
+        assert ws_reqs[0].is_text is True
+        assert (
+            ws_reqs[0].event.response.payload_data ==
+            '{"live_price": 65000.00}'
+            )
+
+        # Action Results Extraction
+        actions = response.action_results
+        assert actions is not None
+        assert len(actions) == 2
+        assert actions[0].action == "Click"
+        assert actions[0].success is False
+
+        # Screenshots Extraction
+        shots = response.screenshots
+        assert len(shots) == 1
+        assert shots[0].screenshot_type == "FullScreenShot"
+
+        # Frames Extraction
+        frames = response.frames
+        assert len(frames) == 1
+        assert frames[0].content == "<html>Iframe Content</html>"
+
+    @staticmethod
+    def test_missing_optional_json_arrays_safe_fallback(example_url):
+        """
+        Ensures the properties return None when the arrays are missing
+        from the payload.
+        """
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True
+                ),
+            method="GET"
+        )
+        http_resp = httpx.Response(
+            200, json={"statusCode": 200, "content": "<html>Data</html>"}
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert response.network_requests is None
+        assert response.websocket_requests is None
+        assert response.action_results is None
+        assert response.screenshots is None
+        assert response.frames is None

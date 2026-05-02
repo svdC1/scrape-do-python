@@ -14,6 +14,8 @@ import re
 import base64
 from pathlib import Path
 import os
+import urllib.parse
+from functools import cached_property
 from typing import (
     Annotated,
     Literal,
@@ -39,6 +41,16 @@ from scrape_do.constants import (
     _SUPER_SUPPORTED_COUNTRIES,
     _DATACENTER_SUPPORTED_COUNTRIES,
     _ZIPCODE_FORMATS
+    )
+
+from scrape_do.exceptions import (
+    AuthenticationError,
+    BadRequestError,
+    AuthenticationThrottleError,
+    APIResponseError,
+    RateLimitError,
+    ServerError,
+    TargetError
     )
 
 # -------------------------------------------------------------------
@@ -97,7 +109,7 @@ class WaitSelectorAction(BaseModel):
     Attributes:
         action (Literal["WaitSelector"]): The literal action identifier.
         wait_selector (str): The CSS selector to wait for.
-        timeout (int, optional): Maximum time to wait in milliseconds.
+        timeout (Optional[int]): Maximum time to wait in milliseconds.
             Defaults to None.
     """
     model_config = ConfigDict(
@@ -242,9 +254,9 @@ class ScreenShotAction(BaseModel):
 
     Attributes:
         action (Literal["ScreenShot"]): The literal action identifier.
-        full_screenshot (bool, optional): If True, captures the entire
+        full_screenshot (Optional[bool]): If True, captures the entire
             scrollable page.
-        particular_screenshot (str, optional): CSS selector of a specific
+        particular_screenshot (Optional[str]): CSS selector of a specific
             element to capture.
     """
     model_config = ConfigDict(
@@ -429,58 +441,58 @@ class RequestParameters(BaseModel):
 
     Attributes:
         url (HttpUrl): The absolute destination URL you wish to scrape.
-        super (bool, optional): Activates Residential/Mobile IP proxies.
-        render (bool, optional): Executes the request using a headless browser.
-        device (DeviceType, optional): Specify the device type (desktop,
+        super (Optional[bool]): Activates Residential/Mobile IP proxies.
+        render (Optional[bool]): Executes the request using a headless browser.
+        device (Optional[DeviceType]): Specify the device type (desktop,
             mobile, tablet)
-        session_id (int, optional): Use the same IP address continuously with
+        session_id (Optional[int]): Use the same IP address continuously with
             a session
-        geo_code (str, optional): ISO 3166-1 alpha-2 country code for IP
+        geo_code (Optional[str]): ISO 3166-1 alpha-2 country code for IP
             targeting.
-        regional_geo_code (RegionCodeType, optional): Targets a broader
+        regional_geo_code (Optional[RegionCodeType]): Targets a broader
             geographical region. Requires super=True.
-        postal_code (str, optional): Targets a specific zip code. Requires
+        postal_code (Optional[str]): Targets a specific zip code. Requires
             super=True and a supported geo_code.
-        wait_until (WaitUntilType, optional): Control when the browser
+        wait_until (Optional[WaitUntilType]): Control when the browser
             considers the page loaded
-        custom_wait (int, optional): Set the browser wait time on the target
+        custom_wait (Optional[int]): Set the browser wait time on the target
             web page after content loaded
-        wait_selector (str, optional): CSS selector to wait for in the target
+        wait_selector (Optional[str]): CSS selector to wait for in the target
             web page.
-        width (int, optional): Custom viewport width.
-        height (int, optional): Custom viewport height.
-        return_json (bool, optional): Returns response body as base64-encoded
+        width (Optional[int]): Custom viewport width.
+        height (Optional[int]): Custom viewport height.
+        return_json (Optional[bool]): Returns response body as base64-encoded
             JSON instead of raw HTML.
-        block_resources (bool, optional): Block CSS, images, and fonts on your
+        block_resources (Optional[bool]): Block CSS, images, and fonts on your
             target web page
-        screenshot (bool, optional): Captures the visible viewport.
-        full_screenshot (bool, optional): Captures the entire scrollable page.
-        particular_screenshot (str, optional): Captures a specific DOM element
+        screenshot (Optional[bool]): Captures the visible viewport.
+        full_screenshot (Optional[bool]): Captures the entire scrollable page.
+        particular_screenshot (Optional[str]): Captures a specific DOM element
             by selector.
-        play_with_browser (List[BrowserAction], optional): A sequence of
+        play_with_browser (Optional[List[BrowserAction]]): A sequence of
             automated interactions to perform.
-        show_frames (bool, optional): Returns all iframe content from the
+        show_frames (Optional[bool]): Returns all iframe content from the
             target webpage. Requires render=true and returnJSON=true
-        show_websocket_requests (bool, optional): Captures WebSocket network
+        show_websocket_requests (Optional[bool]): Captures WebSocket network
             traffic. Requires render=true and returnJSON=true.
-        custom_headers (bool, optional): Replaces Scrape.do's default headers
+        custom_headers (Optional[bool]): Replaces Scrape.do's default headers
             with your provided headers.
-        extra_headers (bool, optional): Appends your provided headers to
+        extra_headers (Optional[bool]): Appends your provided headers to
             Scrape.do's default headers.
-        forward_headers (bool, optional): Forwards all headers exactly as sent
+        forward_headers (Optional[bool]): Forwards all headers exactly as sent
             by your client.
-        set_cookies (str, optional): Injects specific cookies into the request.
-        disable_redirection (bool, optional): Prevents the proxy from
+        set_cookies (Optional[str]): Injects specific cookies into the request.
+        disable_redirection (Optional[bool]): Prevents the proxy from
             following 3xx HTTP redirects.
-        timeout (int, optional): Total API connection timeout in milliseconds.
-        retry_timeout (int, optional): Internal proxy retry duration in
+        timeout (Optional[int]): Total API connection timeout in milliseconds.
+        retry_timeout (Optional[int]): Internal proxy retry duration in
             milliseconds. Cannot be used with render=True.
-        disable_retry (bool, optional): Fails immediately on target error
+        disable_retry (Optional[bool]): Fails immediately on target error
             without rotating IPs.
-        output (OutputType, optional): Output format parser.
-        transparent_response (bool, optional): Return pure response from
+        output (Optional[OutputType]): Output format parser.
+        transparent_response (Optional[bool]): Return pure response from
             target web page without Scrape.do processing
-        pure_cookies (bool, optional): Returns the original Set-Cookie headers
+        pure_cookies (Optional[bool]): Returns the original Set-Cookie headers
             from the target website
     """
     model_config = ConfigDict(
@@ -880,7 +892,7 @@ class RequestParameters(BaseModel):
 
         Args:
             cls (Type[RequestParameters]): The RequestParameters model class
-            v (str, optional): The `geo_code` provided during initialization
+            v (Optional[str]): The `geo_code` provided during initialization
             info (ValidationInfo): The data already validated for the model so
                 far
 
@@ -926,7 +938,7 @@ class RequestParameters(BaseModel):
 
         Args:
             cls (Type[RequestParameters]): The RequestParameters model class
-            v (str, optional): The `postal_code` provided during initialization
+            v (Optional[str]): The `postal_code` provided during initialization
             info (ValidationInfo): The data already validated for the model so
                 far
 
@@ -1010,6 +1022,66 @@ class RequestParameters(BaseModel):
 
         return params
 
+    @classmethod
+    def from_url(cls, api_url: str) -> RequestParameters:
+        """Instantiates a `RequestParameters` instance by parsing a raw
+        Scrape.do API URL string.
+
+        tip: Accepted URLs
+            This method accepts both raw and encoded URLs by using
+            the `urllib.parse.parse_qs` and `urllib.parse.unquote_plus`
+            functions to normalize encoded URLs.
+
+        warning: Browser Actions (`playWithBrowser`)
+            When providing a URL containing the `playWithBrowser` parameter,
+            make sure to use the `json.dumps` function to stringify the list
+            of dictionaries containing the entries. Both the raw and ecoded
+            URLs can be passed to this method afterwards.
+
+        warning: API Token
+            This method ignores the `&token=` parameter containing the
+            Scrape.do API key, since its insertion is meant to be handled by
+            the `ScrapeDoClient` using either an initialization parameter, or
+            the `SCRAPE_DO_API_KEY` environment variable.
+
+        Args:
+            api_url (str): The full Scrape.do endpoint
+                (`https://api.scrape.do/?url=...&render=true...`)
+
+        Raises:
+            ValueError: If the value found in the `&playWithBrowser=` parameter
+                is not a parsable JSON string.
+
+        Returns:
+            The `RequestParameters` instance mapping the URL parameters
+                (`&render=true&...`) to validated attributes
+        """
+
+        parsed = urllib.parse.urlparse(api_url)
+        query_params = urllib.parse.parse_qs(parsed.query)
+        flat_params = {k: v[0] for k, v in query_params.items()}
+
+        # Reconstruct the nested JSON actions if they exist
+        if "playWithBrowser" in flat_params:
+            try:
+                # Manually convert '+' to ' ' specifically for this JSON string
+                decoded = urllib.parse.unquote_plus(
+                    flat_params["playWithBrowser"]
+                    )
+
+                flat_params["playWithBrowser"] = json.loads(decoded)
+
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Failed to decode `playWithBrowser` parameter from URL | "
+                    f"Parameter Value : {flat_params['playWithBrowser']}"
+                    ) from e
+
+        # Strip Token
+        flat_params.pop("token", None)
+
+        return cls(**flat_params)
+
 
 # -------------------------------------------------------------------
 # PreparedScrapeDoRequest Model
@@ -1033,8 +1105,8 @@ class PreparedScrapeDoRequest(BaseModel):
         api_params (RequestParameters): Validated parameters to pass to the
             API
         method (HttpMethod): HTTP method to forward to the target website
-        headers (Dict[str, str], optional): Custom HTTP headers to forward
-        body (Union[Dict[str, Any], str, bytes], optional): Payload to send to
+        headers (Optional[Dict[str, str]]): Custom HTTP headers to forward
+        body (Optional[Union[Dict[str, Any], str, bytes]]): Payload to send to
             the target website (JSON dict, string, or bytes)
         payload_type (PayloadType): Dictates how httpx should encode
             the body. Defaults to 'json'.
@@ -1220,9 +1292,9 @@ class ScrapeDoNetworkRequest(BaseModel):
         status (int): The HTTP status code returned by the resource server.
         request_headers (Dict[str, str]): The headers sent by the headless
             browser.
-        request_body (str, optional): The payload sent with the request,
+        request_body (Optional[str]): The payload sent with the request,
              if any.
-        response_body (str, optional): The payload returned by the server,
+        response_body (Optional[str]): The payload returned by the server,
              if captured.
         response_headers (Dict[str, str]): The headers returned by the
             resource server.
@@ -1301,8 +1373,8 @@ class ScrapeDoActionResult(BaseModel):
             array.
         success (bool): Indicates whether the action completed without
             throwing an error.
-        error (str, optional): The error message if the action failed.
-        response (Union[Dict[str, Any], str], optional): Data returned by the
+        error (Optional[str]): The error message if the action failed.
+        response (Optional[Union[Dict[str, Any], str]]): Data returned by the
             action, typically populated when using the `ExecuteAction` to run
             custom JavaScript.
     """
@@ -1319,9 +1391,9 @@ class ScrapeDoScreenshot(BaseModel):
 
     Attributes:
         screenshot_type (str): The configuration used (e.g., "FullScreenShot").
-        b64_image (str, optional): The Base64 encoded string of the PNG image
+        b64_image (Optional[str]): The Base64 encoded string of the PNG image
             data.
-        error (str, optional): The failure reason if the screenshot could not
+        error (Optional[str]): The failure reason if the screenshot could not
             be captured.
     """
     model_config = ConfigDict(populate_by_name=True)
@@ -1354,7 +1426,7 @@ class ScrapeDoScreenshot(BaseModel):
         Convenience method to save the base64-encoded screenshot
 
         warning: File Type
-            Scrape.do returns a base64-encoded `.png` image data, so `path`
+            Scrape.do returns base64-encoded `.png` image data, so `path`
             should end in `/file_name.png`
 
         Args:
@@ -1379,7 +1451,7 @@ class ScrapeDoFrame(BaseModel):
 
     Attributes:
         url (HttpUrl): The absolute source URL of the iframe.
-        content (str, optional): The rendered HTML content inside the iframe.
+        content (Optional[str]): The rendered HTML content inside the iframe.
     """
     model_config = ConfigDict(populate_by_name=True)
     url: HttpUrl
@@ -1473,7 +1545,94 @@ class ScrapeDoResponse:
         # JSON Parsing
         self._parsed_json: Optional[Dict[str, Any]] = None
         if self._is_json:
-            self._parsed_json = response.json()
+            parsed = response.json()
+            try:
+                parsed = response.json()
+                if isinstance(parsed, dict):
+                    self._parsed_json = parsed
+            except ValueError:
+                # If Scrape.do crashed and returned HTML despite
+                # returnJSON=True, we swallow the error here so the
+                # `is_proxy_error` heuristic can properly route it as a
+                # ServerError later.
+                pass
+
+    @cached_property
+    def is_proxy_error(self) -> bool:
+        """Heuristic to determine whether a non-2xx status code error
+        is coming directly from the target website, or whether it's coming
+        from the Scrape.do gateway
+
+        info: Additional Information
+            Scrape.do usually sends JSON error messages when there's an
+            infrastructure error, so we try to parse the response's payload
+            as JSON regardless of whether or not `return_json=True`.
+
+            - IF `Payload Is Parsable JSON` :
+                  - Check if the returned JSON contatins one of the standard
+                    error keys (`message`, `Error`, `detail`, `Message`,
+                    or `errorMessage`). If it does, then the error is coming
+                    from Scrape.do, so return `True`
+
+                  - Otherwise, check if the returned JSON contains the
+                    `statusCode` key. If it does, and its value matches the
+                    status code returned by the original httpx response, then
+                    the error is probably coming from the `target website`, so
+                    return `False`.
+
+                  - If the value doesn't match or the `statusCode` key is
+                    missing, fallback to `Payload Is Not Parsable JSON` logic.
+
+            - IF `Payload Is Not Parsable JSON` :
+                  - Scrape.do sends telemetry headers when a request is
+                    successfuly completed, so if the response has the
+                    `scrape.do-intial-status-code` header and its value is not
+                    empty, the error is probably coming from the
+                    `target website`, so return `False`. Otherwise, it's
+                    probably a Scrape.do error, so return `True`
+
+        info: `transparent_response=True`
+            When `trasparent_response=True`, Scrape.do can still send its
+            own error status codes when there's an infrastructure failure, so
+            we can't rely on the `scrape_do_status_code` to determine where
+            the error is coming from. With this in mind, this method aims
+            to provide a solution by analysing the response's structure as a
+            whole.
+
+        Returns:
+            `True` if it's a Scrape.do error, or `False` if it's a target
+                website error
+        """
+        raw_status = self._raw_response.status_code
+        has_intial_status_code = self.initial_status_code is not None
+        parsed_json = None
+
+        try:
+            parsed_json = self._raw_response.json()
+        except ValueError:
+            pass
+
+        if isinstance(parsed_json, dict):
+            error_keys = [
+                "message",
+                "Error",
+                "detail",
+                "Message",
+                "errorMessage"
+                ]
+
+            if any(k in parsed_json for k in error_keys):
+                return True
+
+            status_code_match = (
+                "statusCode" in parsed_json
+                and int(parsed_json["statusCode"]) == raw_status
+                )
+
+            if status_code_match:
+                return False
+
+        return not has_intial_status_code
 
     @property
     def httpx_response(self) -> httpx.Response:
@@ -1521,18 +1680,25 @@ class ScrapeDoResponse:
         """The HTTP status code returned by the destination website.
 
         info: Additional Information
+            - If `self.is_proxy_error=True`, the target website was never
+              reached, so return `None`
+
             - If `transparent_response=True`, the original status code from
               the httpx response is returned
 
             - If `return_json=True`, the `statusCode` field from the response's
               JSON is returned
 
-            - If both parameters are set to false, the
-              `ScrapeDoResponse.initial_status_code` property value is returned
+            - If it's not a proxy error, and both parameters are set to false,
+              the `ScrapeDoResponse.initial_status_code` property value is
+              returned
 
         Returns:
             The target website's status code (e.g., 200, 403, 404).
         """
+        if self.is_proxy_error:
+            return None
+
         if self._is_transparent:
             return self._raw_response.status_code
 
@@ -1582,17 +1748,20 @@ class ScrapeDoResponse:
     # --- Scrape.do Headers ---
 
     @property
-    def scrape_do_headers(self) -> httpx.Headers:
+    def scrape_do_headers(self) -> Optional[httpx.Headers]:
         """Filters the response headers to isolate Scrape.do's specific
         infrastructure telemetry.
 
         Returns:
-            Only headers prefixed with `scrape.do-`.
+            Only headers prefixed with `scrape.do-`, or None if no
+                `scrape.do-` headers are found
         """
         headers = {
             k: v for k, v in self._raw_response.headers.items()
             if k.lower().startswith("scrape.do-")
             }
+        if not headers:
+            return None
         return httpx.Headers(headers)
 
     @property
@@ -1695,8 +1864,8 @@ class ScrapeDoResponse:
 
         info: Session ID
             If `session_id` was provided in the parameters,
-            this Routing ID can be used to verify that sticky sessions are
-            maintaining the same node.
+            this Routing ID is used by the `ScrapeDoClient` to verify that
+            sticky sessions are maintaining the same node.
 
         Returns:
             The internal routing identifier, or None if the `scrape.do-rid`
@@ -1819,3 +1988,118 @@ class ScrapeDoResponse:
                 self._parsed_json["screenShots"]
                 ]
         return None
+
+    def raise_for_status(self) -> Self:
+        """Evaluates the response and raises a mapped exception if the request
+        failed.
+
+        info: Additional Information
+            Utilizes the `is_proxy_error` heuristic to determine if
+            the failure originated from the Scrape.do proxy infrastructure or
+            from the target website.
+
+        Returns:
+            The current `ScrapeDoResponse` instance,
+                allowing for method chaining.
+
+        Raises:
+            TargetError: If the proxy succeeded, but the target website
+                returned an error code (e.g., a 403 Cloudflare block or a 404
+                Not Found).
+            BadRequestError: If the request was malformed
+                (HTTP 400 from Scrape.do).
+            AuthenticationError: If your Scrape.do API token is invalid
+                (HTTP 401).
+            AuthenticationThrottleError: If your specific token has been
+                temporarily locked by the Scrape.do authentication server to
+                prevent abuse.
+            RateLimitError: If you exceed your account's concurrent request
+                limit (HTTP 429).
+            ServerError: If the Scrape.do gateway experiences an issue
+                (HTTP 500+).
+            APIResponseError: A generic fallback for unmapped Scrape.do proxy
+                errors.
+        """
+
+        if self.target_status_code and self.target_status_code < 400:
+            return self
+
+        # Checks if it's an Authentication Throttle Error
+        error_msg = None
+        if self._parsed_json:
+            error_keys = [
+                "message",
+                "Error",
+                "detail",
+                "Message",
+                "errorMessage"
+                ]
+
+            for k in error_keys:
+                if k in self._parsed_json:
+                    error_msg = self._parsed_json[k]
+                    break
+
+        elif self.text:
+            error_msg = self.text
+
+        is_throttled = None
+        throttled_msg = "temporarily throttled by the authentication server"
+        if error_msg and throttled_msg in error_msg:
+            is_throttled = True
+
+        raw_status = self._raw_response.status_code
+
+        # Route to Proxy Infrastructure Errors
+        if self.is_proxy_error:
+
+            if raw_status == 400:
+                raise BadRequestError(
+                    self._raw_response,
+                    self._raw_request,
+                    self
+                    )
+
+            elif raw_status == 401:
+                if is_throttled:
+                    raise AuthenticationThrottleError(
+                        self._raw_response,
+                        self._raw_request,
+                        self
+                        )
+
+                raise AuthenticationError(
+                    self._raw_response,
+                    self._raw_request,
+                    self
+                    )
+
+            elif raw_status == 429:
+                raise RateLimitError(
+                    self._raw_response,
+                    self._raw_request,
+                    self
+                    )
+            elif raw_status >= 500:
+                raise ServerError(
+                    self._raw_response,
+                    self._raw_request,
+                    self
+                    )
+
+            raise APIResponseError(
+                self._raw_response,
+                self._raw_request,
+                self
+                )
+
+        # If is_proxy_error is False, then it's a TargetError
+        raise TargetError(
+            (f"Target rejected request with status: "
+             f"{self.target_status_code}"
+             ),
+            self.target_status_code,
+            self._raw_response,
+            self._raw_request,
+            self
+            )
