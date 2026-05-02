@@ -8,4 +8,5 @@
             - "!DeviceType"
             - "!HttpMethod"
             - "!PayloadType"
+            - "!RequestParametersDict"
         members_order: source

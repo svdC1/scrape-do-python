@@ -19,3 +19,4 @@
 :::scrape_do.models.PayloadType
     options:
         separate_signature: true
+:::scrape_do.models.RequestParametersDict

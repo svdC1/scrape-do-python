@@ -218,17 +218,22 @@ class RotatedSessionError(ScrapeDoError):
     session.
 
     Args:
+        message (str): The error message to be displayed.
         raw_response (httpx.Response): The raw HTTPX response object
         request (PreparedScrapeDoRequest): The original request configuration.
         response (ScrapeDoResponse): The successful HTTP response containing
             the new RID state.
         last_known_rid (str): The RID found in the response of the last
-            successful request made with the `request.api_params.session_id`
-            parameter by the `ScrapeDoClient` instance before it raised the
-            exception
+            successful request made with this `session_id` by the
+            `ScrapeDoClient` instance.
+        new_rid (str): The RID found in the response of the request which
+            caused the exception.
+        session_id (int): The `RequestParameters.session_id` that generated the
+            RIDs
     """
     def __init__(
         self,
+        message: str,
         raw_response: httpx.Response,
         request: PreparedScrapeDoRequest,
         response: ScrapeDoResponse,
@@ -240,8 +245,4 @@ class RotatedSessionError(ScrapeDoError):
         self.session_id = session_id
         self.last_known_rid = last_known_rid
         self.raw_response = raw_response
-        msg = (f"The Scrape.do session for `sessionId={self.session_id}` has"
-               f" expired | Last Known RID: {last_known_rid} | "
-               f"Current RID: {self.new_rid}"
-               )
-        super().__init__(msg, request, response)
+        super().__init__(message, request, response)

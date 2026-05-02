@@ -442,7 +442,7 @@ class TestRequestParametersValidation:
             RequestParameters.from_url(url)
 
 
-class TestScrapeDoPreparedRequest:
+class TestPreparedScrapeDoRequestValidation:
 
     @pytest.mark.parametrize(
         "method",
@@ -624,6 +624,25 @@ class TestScrapeDoPreparedRequest:
                 body=body,
                 payload_type=payload_type
             )
+
+    @staticmethod
+    def test_token_insertion(example_url):
+        """
+        Ensures Scrape.do API key is optionally included if `token` parameter
+        is provided
+        """
+        params = RequestParameters(url=example_url)
+
+        req = PreparedScrapeDoRequest(
+            api_params=params,
+            method="GET"
+            )
+
+        token_included = req.to_httpx_kwargs("API_KEY")
+        no_token = req.to_httpx_kwargs()
+
+        assert "token" in token_included["params"]
+        assert "token" not in no_token["params"]
 
 
 class TestScrapeDoResponse:
@@ -888,3 +907,15 @@ class TestScrapeDoResponse:
         req_std = make_request()
         resp_std = make_response(200, proxy_status_header="418")
         assert ScrapeDoResponse(req_std, resp_std).target_status_code == 418
+
+    @staticmethod
+    def test_raise_for_status_success(make_request, make_response):
+        """
+        Ensures that `raise_for_status` doesn't raise an error for
+        2xx status codes
+        """
+
+        req = make_request()
+        resp = make_response(200, proxy_status_header=200)
+
+        resp = ScrapeDoResponse(req, resp).raise_for_status()

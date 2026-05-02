@@ -253,6 +253,39 @@ class TestRequestParametersSerialization:
         assert payload == expected_payload
 
 
+class TestPreparedScrapeDoRequestSerialization:
+
+    @staticmethod
+    def test_serialize_header_to_httpx_kwargs(example_url):
+        """
+        Ensures custom headers are correctly serialized by the
+        `to_httpx_kwargs` method
+        """
+        custom_headers = {"Header1": "Example", "Header2": "Example"}
+
+        params = RequestParameters(
+            url=example_url,
+            render=True,
+            custom_headers=True
+            )
+
+        req = PreparedScrapeDoRequest(
+            method="GET",
+            headers=custom_headers,
+            api_params=params
+            )
+
+        httpx_kwargs = req.to_httpx_kwargs()
+
+        assert httpx_kwargs["method"] == "GET"
+        assert httpx_kwargs["headers"] == custom_headers
+        assert httpx_kwargs["params"] == params.to_api_params()
+        assert httpx_kwargs["url"] == "https://api.scrape.do/"
+        assert "json" not in httpx_kwargs
+        assert "content" not in httpx_kwargs
+        assert "data" not in httpx_kwargs
+
+
 class TestScrapeDoResponseSerialization:
 
     @staticmethod

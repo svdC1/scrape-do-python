@@ -26,7 +26,8 @@ from typing import (
     Type,
     Any,
     TypeAlias,
-    Dict
+    Dict,
+    TypedDict
     )
 from pydantic import (
     BaseModel,
@@ -426,6 +427,146 @@ Defines the valid types of payload that can be passed to the
 `payload_type` parameter in the `PreparedScrapeDoRequest` model
 """
 
+
+# -------------------------------------------------------------------
+# Typed Dicts
+# -------------------------------------------------------------------
+
+class RequestParametersDict(TypedDict, total=False):
+    """
+    Provides strict IDE autocomplete and static type checking for `**kwargs`
+    dictionaries meant for the
+    [RequestParameters][scrape_do.models.RequestParameters] model.
+    """
+    super: Optional[bool]
+    """
+    Activates Residential/Mobile IP proxies.
+    """
+    render: Optional[bool]
+    """
+    Executes the request using a headless browser.
+    """
+    device: Optional[DeviceType]
+    """
+    Specify the device type (desktop, mobile, tablet)
+    """
+    session_id: Optional[int]
+    """
+    Use the same IP address continuously with a session
+    """
+    geo_code: Optional[str]
+    """
+    ISO 3166-1 alpha-2 country code for IP targeting.
+    """
+    regional_geo_code: Optional[RegionCodeType]
+    """
+    Targets a broader geographical region. Requires super=True.
+    """
+    postal_code: Optional[str]
+    """
+    Targets a specific zip code. Requires super=True and a supported geo_code.
+    """
+    wait_until: Optional[WaitUntilType]
+    """
+    Control when the browser considers the page loaded
+    """
+    custom_wait: Optional[int]
+    """
+    Set the browser wait time on the target web page after content loaded
+    """
+    wait_selector: Optional[str]
+    """
+    CSS selector to wait for in the target web page.
+    """
+    width: Optional[int]
+    """
+    Custom viewport width.
+    """
+    height: Optional[int]
+    """
+    Custom viewport height.
+    """
+    return_json: Optional[bool]
+    """
+    Returns response body as base64-encoded JSON instead of raw HTML.
+    """
+    block_resources: Optional[bool]
+    """
+    Block CSS, images, and fonts on your target web page
+    """
+    screenshot: Optional[bool]
+    """
+    Captures the visible viewport.
+    """
+    full_screenshot: Optional[bool]
+    """
+    Captures the entire scrollable page.
+    """
+    particular_screenshot: Optional[str]
+    """
+    Captures a specific DOM element by selector.
+    """
+    play_with_browser: Optional[List[BrowserAction]]
+    """
+    A sequence of automated interactions to perform.
+    """
+    show_frames: Optional[bool]
+    """
+    Returns all iframe content from the target webpage. Requires render=true
+    and returnJSON=true
+    """
+    show_websocket_requests: Optional[bool]
+    """
+    Captures WebSocket network traffic. Requires render=true and
+    returnJSON=true.
+    """
+    custom_headers: Optional[bool]
+    """
+    Replaces Scrape.do's default headers with your provided headers.
+    """
+    extra_headers: Optional[bool]
+    """
+    Appends your provided headers to Scrape.do's default headers.
+    """
+    forward_headers: Optional[bool]
+    """
+    Forwards all headers exactly as sent by your client.
+    """
+    set_cookies: Optional[str]
+    """
+    Injects specific cookies into the request.
+    """
+    disable_redirection: Optional[bool]
+    """
+    Prevents the proxy from following 3xx HTTP redirects.
+    """
+    timeout: Optional[int]
+    """
+    Total API connection timeout in milliseconds.
+    """
+    retry_timeout: Optional[int]
+    """
+    Internal proxy retry duration in milliseconds. Cannot be used with
+    render=True.
+    """
+    disable_retry: Optional[bool]
+    """
+    Fails immediately on target error without rotating IPs.
+    """
+    output: Optional[OutputType]
+    """
+    Output format parser.
+    """
+    transparent_response: Optional[bool]
+    """
+    Return pure response from target web page without Scrape.do processing
+    """
+    pure_cookies: Optional[bool]
+    """
+    Returns the original Set-Cookie headers from the target website
+    """
+
+
 # -------------------------------------------------------------------
 # Request Parameters Model
 # -------------------------------------------------------------------
@@ -536,7 +677,8 @@ class RequestParameters(BaseModel):
         None,
         alias="geoCode",
         min_length=2,
-        max_length=2
+        max_length=2,
+        validate_default=True
         )
 
     regional_geo_code: Optional[RegionCodeType] = Field(
@@ -546,7 +688,8 @@ class RequestParameters(BaseModel):
 
     postal_code: Optional[str] = Field(
         None,
-        alias="postalcode"
+        alias="postalcode",
+        validate_default=True
     )
 
     # --- Browser Parameters ---
@@ -891,7 +1034,6 @@ class RequestParameters(BaseModel):
         """Validates the country code against the allowed proxy pools.
 
         Args:
-            cls (Type[RequestParameters]): The RequestParameters model class
             v (Optional[str]): The `geo_code` provided during initialization
             info (ValidationInfo): The data already validated for the model so
                 far
@@ -937,7 +1079,6 @@ class RequestParameters(BaseModel):
         """Validates postal codes based on specific regional formats.
 
         Args:
-            cls (Type[RequestParameters]): The RequestParameters model class
             v (Optional[str]): The `postal_code` provided during initialization
             info (ValidationInfo): The data already validated for the model so
                 far
@@ -1023,7 +1164,7 @@ class RequestParameters(BaseModel):
         return params
 
     @classmethod
-    def from_url(cls, api_url: str) -> RequestParameters:
+    def from_url(cls: type[Self], api_url: str) -> RequestParameters:
         """Instantiates a `RequestParameters` instance by parsing a raw
         Scrape.do API URL string.
 
@@ -1250,18 +1391,33 @@ class PreparedScrapeDoRequest(BaseModel):
 
         return self
 
-    def to_httpx_kwargs(self) -> Dict[str, Any]:
+    def to_httpx_kwargs(self, token: Optional[str] = None) -> Dict[str, Any]:
         """Packages the validated object into a dictionary ready for httpx
         unpacking.
+
+        info: Token
+            The optional `token` parameter is the user's Scrape.do API key and
+            is only added here only for convenience. It can also be manuall
+            inserted into the resulting `httpx_kwargs` dictionary as the value
+            to the `token` key if it isn't provided
+
+        Args:
+            token (Optional[str]): The Scrape.do API key to include in the
+                dictionary
 
         Returns:
             Keyword arguments strictly formatted for `httpx.request()`.
         """
 
+        params = self.api_params.to_api_params()
+
+        if token is not None:
+            params["token"] = token
+
         kwargs: Dict[str, Any] = {
             "method": self.method,
             "url": "https://api.scrape.do/",
-            "params": self.api_params.to_api_params()
+            "params": params
         }
 
         if self.headers:
@@ -2016,11 +2172,11 @@ class ScrapeDoResponse:
                 (HTTP 401).
             AuthenticationThrottleError: If your specific token has been
                 temporarily locked by the Scrape.do authentication server to
-                prevent abuse.
+                prevent abuse. (HTTP 401)
             RateLimitError: If you exceed your account's concurrent request
                 limit (HTTP 429).
             ServerError: If the Scrape.do gateway experiences an issue
-                (HTTP 500+).
+                (HTTP 502/510).
             APIResponseError: A generic fallback for unmapped Scrape.do proxy
                 errors.
         """
@@ -2084,7 +2240,7 @@ class ScrapeDoResponse:
                     self._raw_request,
                     self
                     )
-            elif raw_status >= 500:
+            elif raw_status in (502, 510):
                 raise ServerError(
                     self._raw_response,
                     self._raw_request,

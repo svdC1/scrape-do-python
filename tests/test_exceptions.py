@@ -7,7 +7,8 @@ from scrape_do.exceptions import (
     AuthenticationThrottleError,
     RateLimitError,
     ServerError,
-    BadRequestError
+    BadRequestError,
+    RotatedSessionError
 )
 
 # --- Testing Exception Parsing & Properties ---
@@ -91,6 +92,7 @@ def test_target_error_flags(
         (401, None, None, AuthenticationError),
         (429, None, None, RateLimitError),
         (502, None, None, ServerError),
+        (503, None, None, APIResponseError)
         ]
     )
 def test_raise_for_status_routing(
@@ -101,7 +103,8 @@ def test_raise_for_status_routing(
     proxy_status_header,
     expected_exception
 ):
-    """Ensures raise_for_status throws the correct exception based on the
+    """
+    Ensures raise_for_status throws the correct exception based on the
     is_proxy_error heuristic.
     """
     req = make_request()
@@ -135,3 +138,30 @@ def test_raise_for_status_auth_throttle_trap(make_request, make_response):
 
     with pytest.raises(AuthenticationThrottleError):
         scrape_resp.raise_for_status()
+
+
+def test_rotated_session_error_init(make_request, make_response):
+    """
+    Ensures RotatedSessionError is properly initialized
+    """
+
+    req = make_request()
+    resp = make_response(200)
+    scrape_do_resp = ScrapeDoResponse(req, resp)
+    err = RotatedSessionError(
+        "Session Expired",
+        resp,
+        req,
+        scrape_do_resp,
+        "last_known_rid",
+        "new_rid",
+        100
+        )
+
+    assert err.message == "Session Expired"
+    assert err.raw_response == resp
+    assert err.request is req
+    assert err.response is scrape_do_resp
+    assert err.last_known_rid == "last_known_rid"
+    assert err.new_rid == "new_rid"
+    assert err.session_id == 100
