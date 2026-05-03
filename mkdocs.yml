@@ -24,8 +24,12 @@ theme:
 nav:
   - Home: index.md
   - API Reference:
-      - Models: models.md
-      - Types: types.md
+      - Models:
+          - Enums: models/enums.md
+          - Parameters: models/parameters.md
+          - Browser Actions: models/browser_actions.md
+          - Request: models/request.md
+          - Response: models/response.md
       - Exceptions: exceptions.md
       - Constants: constants.md
 plugins:

@@ -10,7 +10,7 @@ import httpx
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scrape_do.models import PreparedScrapeDoRequest, ScrapeDoResponse
+    from .models import PreparedScrapeDoRequest, ScrapeDoResponse
 
 
 class ScrapeDoError(Exception):
