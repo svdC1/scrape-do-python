@@ -1,0 +1,54 @@
+name: Integration Tests
+on:
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+  
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+  
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+
+      - name: Run Integration Tests
+        env:
+          SCRAPE_DO_API_KEY: ${{secrets.SCRAPE_DO_API_KEY}}
+        run: pytest tests/integration/ --cov --junitxml=junit.xml
+    
+
+      - name: Upload Test Logs
+        uses: actions/upload-artifact@v4
+        if: always() 
+        with:
+          name: integration-run-logs
+          path: logs/*.log
+          retention-days: 7
+    
+      - name: Upload Coverage To Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          flags: integration
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload Test Results To Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          flags: integration
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}

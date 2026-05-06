@@ -1,0 +1,26 @@
+coverage:
+  status:
+    project:
+      unit:
+        target: auto
+        threshold: 5
+        flags: [unit]
+      integration:
+        target: auto
+        threshold: 5
+        flags: [integration]
+    patch:
+      unit:
+        target: auto
+        flags: [unit]
+      integration:
+        target: auto
+        flags: [integration]
+
+flags:
+  unit:
+    paths: [src/]
+    carryforward: true
+  integration:
+    paths: [src/]
+    carryforward: true

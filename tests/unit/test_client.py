@@ -12,6 +12,8 @@ from scrape_do.exceptions import (
     RotatedSessionError
     )
 
+pytestmark = pytest.mark.unit
+
 
 class TestClientInitialization:
 

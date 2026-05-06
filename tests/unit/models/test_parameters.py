@@ -11,6 +11,9 @@ from scrape_do.models import (
     )
 
 
+pytestmark = pytest.mark.unit
+
+
 class TestRequestParametersValidation:
 
     @pytest.mark.parametrize(

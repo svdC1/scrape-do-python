@@ -131,7 +131,7 @@ class ScrapeDoClient:
         Additionally, the following `httpx.Client.request` parameters can be
         provided as keyword arguments during request execution.
 
-        - `timeout` -> `client_timeout`
+        - `timeout` (`r_timeout`)
         - `extensions`
 
         For more information on their behaviour and default values, please

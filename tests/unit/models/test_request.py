@@ -5,6 +5,8 @@ from scrape_do.models import (
     PreparedScrapeDoRequest,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestPreparedScrapeDoRequestValidation:
 

@@ -15,6 +15,8 @@ from scrape_do.models import (
     RequestParameters
     )
 
+pytestmark = pytest.mark.unit
+
 
 class TestBrowserActionValidation:
     @staticmethod

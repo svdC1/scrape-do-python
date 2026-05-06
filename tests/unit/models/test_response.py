@@ -9,6 +9,8 @@ from scrape_do.models import (
     ScrapeDoScreenshot
     )
 
+pytestmark = pytest.mark.unit
+
 
 class TestScrapeDoResponseValidation:
 
