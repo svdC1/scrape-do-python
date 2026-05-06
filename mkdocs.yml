@@ -24,6 +24,7 @@ theme:
 nav:
   - Home: index.md
   - API Reference:
+      - Client: client.md
       - Models:
           - Enums: models/enums.md
           - Parameters: models/parameters.md

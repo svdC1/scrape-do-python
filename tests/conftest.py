@@ -1,6 +1,12 @@
+"""
+Shared fixtures for the SDK's test suite
+"""
+
 import pytest
 import httpx
 from scrape_do.models import RequestParameters, PreparedScrapeDoRequest
+from unittest.mock import MagicMock
+from scrape_do.client import ScrapeDoClient
 
 
 @pytest.fixture
@@ -135,3 +141,30 @@ def make_response():
             return httpx.Response(status_code, headers=headers, json=json_data)
         return httpx.Response(status_code, headers=headers, text=text or "")
     return _make
+
+
+@pytest.fixture
+def mock_sync_client():
+    """
+    Yields a cleanly initialized ScrapeDoClient for testing.
+    """
+    with ScrapeDoClient(api_token='dummy_token') as client:
+        yield client
+
+
+@pytest.fixture
+def mock_env_vars(monkeypatch: pytest.MonkeyPatch):
+    """Clears the SCRAPE_DO_API_KEY from the environment for a test function
+
+    Guarantees that tests do not accidentally inherit a real
+    developer token from the local machine's environment variables
+    """
+    monkeypatch.delenv("SCRAPE_DO_API_KEY", raising=False)
+
+
+@pytest.fixture
+def mock_sleep(mocker) -> MagicMock:
+    """
+     Mocks `time.sleep` across an entire test function.
+    """
+    return mocker.patch("time.sleep", return_value=None)
