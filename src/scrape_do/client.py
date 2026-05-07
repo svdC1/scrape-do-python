@@ -36,9 +36,10 @@ from typing import (
     Any,
     Union,
     Unpack,
-    Mapping,
     Callable,
-    Literal
+    Literal,
+    TypeAlias,
+    TypedDict
     )
 from types import TracebackType
 from .models import (
@@ -51,7 +52,70 @@ from .models import (
     )
 from .exceptions import APIConnectionError, RotatedSessionError
 
+
 logger = logging.getLogger("scrape_do")
+
+
+# --- Type Definitions ---
+
+SyncSessionValidator: TypeAlias = Callable[[ScrapeDoResponse], bool]
+"""
+Defines the expected signature of the custom function meant to be passed
+to the `ScrapeDoClient.execute` method's `session_validator` argument
+"""
+
+
+class SyncClientEventHooks(TypedDict, total=False):
+    """
+    Configuration dictionary for SDK-native lifecycle hooks.
+
+    Unlike native HTTPX event hooks which fire on every transport-level
+    execution (and can corrupt telemetry during autonomic retries), these SDK
+    hooks map cleanly to the logical request lifecycle.
+    """
+
+    request: List[
+        Callable[[PreparedScrapeDoRequest], None]
+        ]
+    """
+    Fires exactly once per logical execution, immediately before the retry
+    loop begins. Receives the `PreparedScrapeDoRequest` object that will be
+    used to exececute the request. Useful for logging the request being
+    executed.
+    """
+    response: List[
+        Callable[[ScrapeDoResponse], None]
+        ]
+    """
+    Fires exactly once per logical execution, immediately after the proxy
+    returns a response and the `session_validator` (if any) passes.
+    Receives the request's `ScrapeDoResponse` object. Useful for
+    logging only the final response after all retries, which can be either
+    a successful response, a non-retryable error, or a final retryable error
+    after `max_attempts` has been exhausted.
+    """
+    retry: List[
+        Callable[
+            [
+                int,
+                PreparedScrapeDoRequest,
+                Optional[ScrapeDoResponse],
+                Optional[Exception]
+                ],
+            None
+            ]
+        ]
+    """
+    Fires inside the execution loop ONLY when a proxy gateway error
+    (or an httpx.RequestError) occurs and the SDK decides to retry. Receives
+    the current attempt number, the prepared request, and either the failed
+    response (if it exists) or the `httpx.RequestError` that caused the retry.
+    Useful for tracking proxy instability or manually raising an exception to
+    abort the retry loop.
+    """
+
+
+# --- Client Default Backoff Strategy ---
 
 
 def default_backoff_strategy(attempt: int) -> float:
@@ -90,9 +154,6 @@ class ScrapeDoClient:
         - Status code error parsing and customisable retry intervals for
           rate-limited requests.
 
-        - Scrape.do sticky sessions tracking via the `scrape.do-rid` header,
-          with an option to raise an exception on session rotations.
-
         - Strongly-typed interface for responses via the `ScrapeDoResponse`
           Pyadantic model.
 
@@ -101,15 +162,11 @@ class ScrapeDoClient:
         (429, 502, 510), automatically applying a customisable retry strategy
         before the error can reach the application.
 
-    info: Sessions (`sessionId`)
-         If you configure a request with a `session_id`, Scrape.do will
-         attempt to route your traffic through the same proxy address. However,
-         it can still silently rotate this address for various reasons.
-         Because of this, the client attempts to track these rotations by
-         checking the `scrape.do-rid` header for changes between requests.
-         To raise an exception when a change in this header's value is
-         detected, you can set `raise_on_rid_rotation=True` during
-         initialization.
+    tip: SDK Event Hooks (`event_hooks`)
+        This client implements SDK-specific event hooks mimicking the
+        structure of `httpx` native event hooks. See
+        [`SyncClientEventHooks`][scrape_do.client.SyncClientEventHooks] for
+        available lifecycle hooks and their required signatures.
 
     tip: Additional `httpx.Client` Configuration
         The following `httpx.Client` parameters can be provided as keyword
@@ -121,7 +178,6 @@ class ScrapeDoClient:
         - `http2`
         - `timeout`
         - `limits`
-        - `event_hooks`
         - `transport`
         - `default_encoding`
 
@@ -135,11 +191,11 @@ class ScrapeDoClient:
         consult the official
         [`httpx`](https://www.python-httpx.org/api/#client) documentation.
 
-    warning: `trust_env=False`
+    warning: Unsupported HTTPX Client Arguments
         The underlying `httpx.Client` object is strictly managed by the
         instance to prevent invalid configurations from being sent to the
-        Scrape.do API. For this reason, the client's `trust_env` parameter is
-        always set to `False`.
+        Scrape.do API. For this reason, arguments not listed in the previous
+        section are intentionally blocked and shouldn't be changed.
 
     Args:
         api_token (Optional[str]): The Scrape.do API key. If omitted, the
@@ -152,9 +208,9 @@ class ScrapeDoClient:
             `float` (seconds) or a callable that accepts the current attempt
             number (0-indexed) and returns a float. Defaults to a jittered
             exponential backoff when set to `None`.
-        raise_on_rid_rotation (bool): If True, raises a `RotatedSessionError`
-            if the `scrape.do-rid` header value changes during an active
-            sticky session.
+        event_hooks (Optional[SyncClientEventHooks]): A dictionary of
+            SDK-native hooks to execute during different points of the request
+            lifecycle.
         verify (Union[ssl.SSLContext, str, bool]): Configures SSL certificate
             verification. Defaults to True (secure).
         cert (Optional[CertTypes]): Client-side certificates for mutual TLS
@@ -166,9 +222,6 @@ class ScrapeDoClient:
             default to accommodate Scrape.do proxy round-trips
             (browser rendering, geo-routing, fingerprinting).
         limits (Limits): Configuration for maximum connection pool sizes.
-        event_hooks (Optional[Mapping[str, list[Callable[..., Any]]]]): Custom
-            hooks injected into the request/response lifecycle for logging or
-            telemetry.
         transport (Optional[BaseTransport]): A completely custom transport
             engine
         default_encoding (Union[str, Callable[[bytes], str]]): The fallback
@@ -178,8 +231,8 @@ class ScrapeDoClient:
         self,
         api_token: Optional[str] = None,
         max_retries: int = 3,
-        raise_on_rid_rotation: bool = False,
         retry_backoff: Optional[Union[float, Callable[[int], float]]] = None,
+        event_hooks: Optional[SyncClientEventHooks] = None,
         *,
         verify: Union[ssl.SSLContext, str, bool] = True,
         cert: Optional[CertTypes] = None,
@@ -187,7 +240,6 @@ class ScrapeDoClient:
         http2: bool = False,
         timeout: TimeoutTypes = 60.0,
         limits: Limits = DEFAULT_LIMITS,
-        event_hooks: Optional[Mapping[str, list[Callable[..., Any]]]] = None,
         transport: Optional[BaseTransport] = None,
         default_encoding: Union[str, Callable[[bytes], str]] = "utf-8"
     ) -> None:
@@ -199,11 +251,13 @@ class ScrapeDoClient:
                 )
 
         self.max_retries = max_retries
-        self.raise_on_rid_rotation = raise_on_rid_rotation
+
         if retry_backoff is not None:
             self.retry_backoff = retry_backoff
         else:
             self.retry_backoff = default_backoff_strategy
+
+        self.event_hooks: SyncClientEventHooks = event_hooks or {}
 
         self._http_client = Client(
             verify=verify,
@@ -213,11 +267,9 @@ class ScrapeDoClient:
             http2=http2,
             timeout=timeout,
             limits=limits,
-            event_hooks=event_hooks,
             transport=transport,
             default_encoding=default_encoding
             )
-        self._active_sessions: Dict[str, List[str]] = {}
 
     def close(self) -> None:
         """Closes the underlying HTTPX connection pool.
@@ -260,6 +312,7 @@ class ScrapeDoClient:
     def execute(
         self,
         request: PreparedScrapeDoRequest,
+        session_validator: Optional[SyncSessionValidator] = None,
         *,
         r_timeout: Union[TimeoutTypes, UseClientDefault] = USE_CLIENT_DEFAULT,
         extensions: Optional[RequestExtensions] = None
@@ -267,7 +320,7 @@ class ScrapeDoClient:
         """Executes a fully prepared and validated Scrape.do request.
 
         Acts as the core execution funnel, applying the retry
-        backoff logic, evaluating gateway errors, updating session telemetry,
+        backoff logic, evaluating gateway errors and sessions,
         and isolating cookies between sequential executions.
 
         tip: Intended Usage
@@ -275,10 +328,41 @@ class ScrapeDoClient:
             `PreparedScrapeDoRequest` object for bulk routing,
             custom configurations, or task reusability.
 
+        warning: Sessions (`sessionId`)
+            - If you configure a request with a `session_id`, Scrape.do will
+              attempt to route your traffic through the same proxy address.
+              However, it can still silently rotate this address for various
+              reasons. If it rotates during a multi-step scraping task, any
+              target-specific WAF state or cookies accumulated will be lost,
+              which may cause the task to fail.
+
+        tip: Validating Sessions (`session_validator`)
+
+            - In order to prevent unexpected errors due to dropped sessions,
+              you can pass a custom function to the client's `execute` method
+              `session_validator` argument.
+
+            - This function will be called internally by the client after each
+              stateful request (`sessionId is not None`) to determine whether
+              or not a `RotatedSessionError` exception should be raised to
+              signal that this session is no longer valid.
+
+            - The function should take the current request's `ScrapeDoResponse`
+              object as its only argument, and return a single `bool` value.
+
+            - If the function evaluates to `True`, this method will raise the
+              `RotatedSessionError` instead of returning the response object.
+              (The request's `ScrapeDoResponse` object can still be accessed
+              later on using the exception's `response` attribute.) Otherwise,
+              no additional action is taken.
+
         Args:
             request (PreparedScrapeDoRequest): The validated request payload.
             r_timeout (Union[TimeoutTypes, UseClientDefault]): A
                 request-specific timeout override.
+            session_validator (Optional[SyncSessionValidator]): A custom
+                function to be called in order to determine whether or not to
+                raise a `RotatedSessionError` exception.
             extensions (Optional[RequestExtensions]): Advanced HTTPX
                 extensions for this specific request.
 
@@ -288,11 +372,18 @@ class ScrapeDoClient:
         Raises:
             APIConnectionError: If the underlying network transport drops
                 entirely (e.g., DNS failure).
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
+            RotatedSessionError: If a `session_validator` is provided, the
+                request was made with a `session_id` argument, and the
+                `session_validator` returned `True`
         """
+
+        # Fire Request Event Hooks
+        if "request" in self.event_hooks:
+            for req_hook in self.event_hooks["request"]:
+                req_hook(request)
+
         httpx_kwargs = request.to_httpx_kwargs(token=self.api_token)
+        session_id = request.api_params.session_id
 
         if r_timeout is not USE_CLIENT_DEFAULT:
             httpx_kwargs["timeout"] = r_timeout
@@ -312,13 +403,49 @@ class ScrapeDoClient:
 
                     if scrape_response.is_proxy_error and is_retryable_status:
                         if attempt < self.max_retries:
+
+                            # Fire retry hook and pass response
+                            if "retry" in self.event_hooks:
+                                for retry_hook in self.event_hooks["retry"]:
+                                    retry_hook(
+                                        attempt,
+                                        request,
+                                        scrape_response,
+                                        None
+                                        )
+
                             if callable(self.retry_backoff):
                                 time.sleep(self.retry_backoff(attempt))
                             else:
                                 time.sleep(float(self.retry_backoff))
                             continue
 
-                    self._enforce_session_state(request, scrape_response)
+                        # If attempt == max_retries, fall through
+                        # to return the failed ScrapeDoResponse to the user.
+
+                    # Call validator if session_id is not None
+                    if (
+                        session_validator is not None
+                        and session_id is not None
+                    ):
+                        # Raise exception if validator returns True
+                        if session_validator(scrape_response):
+                            raise RotatedSessionError(
+                                (
+                                    f"User-Defined Session Validator Failed | "
+                                    f"Status: {raw_resp.status_code}"
+                                    ),
+                                raw_resp,
+                                request,
+                                scrape_response
+                                )
+
+                    # Fires on a success, OR on a final 502 if
+                    # retries are exhausted.
+                    if "response" in self.event_hooks:
+                        for resp_hook in self.event_hooks["response"]:
+                            resp_hook(scrape_response)
+
                     return scrape_response
 
                 except RequestError as e:
@@ -327,6 +454,17 @@ class ScrapeDoClient:
                             f"Network transport failed: {str(e)}",
                             request
                             ) from e
+
+                    # Fire retry hook and pass the exception
+                    if "retry" in self.event_hooks:
+                        for retry_hook in self.event_hooks["retry"]:
+                            retry_hook(
+                                attempt,
+                                request,
+                                None,
+                                e
+                                )
+
                     if callable(self.retry_backoff):
                         time.sleep(self.retry_backoff(attempt))
                     else:
@@ -347,6 +485,7 @@ class ScrapeDoClient:
         headers: Optional[Dict[str, str]] = None,
         body: Optional[Union[Dict[str, Any], str, bytes]] = None,
         payload_type: PayloadType = "json",
+        session_validator: Optional[SyncSessionValidator] = None,
         *,
         r_timeout: Union[TimeoutTypes, UseClientDefault] = USE_CLIENT_DEFAULT,
         extensions: Optional[RequestExtensions] = None
@@ -375,6 +514,10 @@ class ScrapeDoClient:
                 send to the target website.
             payload_type (PayloadType): Dictates how the client encodes the
                  `body` (e.g., 'json', 'data').
+            session_validator (Optional[SyncSessionValidator]): A custom
+                function to be called in order to determine whether or not to
+                raise a `RotatedSessionError` exception. (See
+                `ScrapeDoClient.execute` docstring for more information)
             r_timeout (Union[TimeoutTypes, UseClientDefault]): A
                 request-specific timeout override.
             extensions (Optional[RequestExtensions]): Advanced HTTPX
@@ -383,9 +526,9 @@ class ScrapeDoClient:
         Raises:
             APIConnectionError: If the underlying network transport drops
                 entirely (e.g., DNS failure).
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
+            RotatedSessionError: If a `session_validator` is provided, the
+                request was made with a `session_id` argument, and the
+                `session_validator` returned `True`
 
         Returns:
             The `ScrapeDoResponse` object containing the target's data.
@@ -399,6 +542,7 @@ class ScrapeDoClient:
             )
         return self.execute(
             req,
+            session_validator,
             r_timeout=r_timeout,
             extensions=extensions
             )
@@ -408,6 +552,7 @@ class ScrapeDoClient:
         method: HttpMethod,
         target_url: str,
         params: Optional[RequestParameters] = None,
+        session_validator: Optional[SyncSessionValidator] = None,
         *,
         headers: Optional[Dict[str, str]] = None,
         body: Optional[Union[Dict[str, Any], str, bytes]] = None,
@@ -467,6 +612,10 @@ class ScrapeDoClient:
                 (or a raw Scrape.do endpoint).
             params (Optional[RequestParameters]): A pre-validated parameter
                 object.
+            session_validator (Optional[SyncSessionValidator]): A custom
+                function to be called in order to determine whether or not to
+                raise a `RotatedSessionError` exception. (See
+                `ScrapeDoClient.execute` docstring for more information)
             headers (Optional[Dict[str, str]]): Custom HTTP headers to forward
                 to the target.
             body (Optional[Union[Dict[str, Any], str, bytes]]): The payload to
@@ -487,9 +636,9 @@ class ScrapeDoClient:
             ValueError: If configuration constraints are violated.
             APIConnectionError: If the underlying network transport drops
                 entirely (e.g., DNS failure).
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
+            RotatedSessionError: If a `session_validator` is provided, the
+                request was made with a `session_id` argument, and the
+                `session_validator` returned `True`
         """
         if "api.scrape.do" in target_url.lower():
             if params is not None or api_kwargs:
@@ -505,6 +654,7 @@ class ScrapeDoClient:
                 headers,
                 body,
                 payload_type,
+                session_validator,
                 r_timeout=r_timeout,
                 extensions=extensions
                 )
@@ -530,6 +680,7 @@ class ScrapeDoClient:
             )
         return self.execute(
             req,
+            session_validator,
             r_timeout=r_timeout,
             extensions=extensions
             )
@@ -540,6 +691,7 @@ class ScrapeDoClient:
         self,
         url: str,
         params: Optional[RequestParameters] = None,
+        session_validator: Optional[SyncSessionValidator] = None,
         *,
         headers: Optional[Dict[str, str]] = None,
         r_timeout: Union[TimeoutTypes, UseClientDefault] = USE_CLIENT_DEFAULT,
@@ -556,6 +708,10 @@ class ScrapeDoClient:
             url (str): The target website URL (or raw Scrape.do URL).
             params (Optional[RequestParameters]): A pre-validated parameter
                 object.
+            session_validator (Optional[SyncSessionValidator]): A custom
+                function to be called in order to determine whether or not to
+                raise a `RotatedSessionError` exception. (See
+                `ScrapeDoClient.execute` docstring for more information)
             headers (Optional[Dict[str, str]]): Custom HTTP headers to forward.
             r_timeout (Union[TimeoutTypes, UseClientDefault]): Request-specific
                 timeout override.
@@ -568,9 +724,9 @@ class ScrapeDoClient:
             ValueError: If configuration constraints are violated.
             APIConnectionError: If the underlying network transport drops
                 entirely (e.g., DNS failure).
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
+            RotatedSessionError: If a `session_validator` is provided, the
+                request was made with a `session_id` argument, and the
+                `session_validator` returned `True`
 
         Returns:
             The `ScrapeDoResponse` object containing the target's data.
@@ -579,6 +735,7 @@ class ScrapeDoClient:
             "GET",
             url,
             params=params,
+            session_validator=session_validator,
             headers=headers,
             r_timeout=r_timeout,
             extensions=extensions,
@@ -589,6 +746,7 @@ class ScrapeDoClient:
         self,
         url: str,
         params: Optional[RequestParameters] = None,
+        session_validator: Optional[SyncSessionValidator] = None,
         *,
         body: Optional[Union[Dict[str, Any], str, bytes]] = None,
         headers: Optional[Dict[str, str]] = None,
@@ -607,6 +765,10 @@ class ScrapeDoClient:
             url (str): The target website URL (or raw Scrape.do URL).
             params (Optional[RequestParameters]): A pre-validated parameter
                 object.
+            session_validator (Optional[SyncSessionValidator]): A custom
+                function to be called in order to determine whether or not to
+                raise a `RotatedSessionError` exception. (See
+                `ScrapeDoClient.execute` docstring for more information)
             body (Optional[Union[Dict[str, Any], str, bytes]]): The payload to
                 send to the target website.
             headers (Optional[Dict[str, str]]): Custom HTTP headers to forward.
@@ -623,9 +785,9 @@ class ScrapeDoClient:
             ValueError: If configuration constraints are violated.
             APIConnectionError: If the underlying network transport drops
                 entirely (e.g., DNS failure).
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
+            RotatedSessionError: If a `session_validator` is provided, the
+                request was made with a `session_id` argument, and the
+                `session_validator` returned `True`
 
         Returns:
             The `ScrapeDoResponse` object containing the target's data.
@@ -641,69 +803,3 @@ class ScrapeDoClient:
             extensions=extensions,
             **api_kwargs
             )
-
-    def _enforce_session_state(
-        self,
-        request: PreparedScrapeDoRequest,
-        response: ScrapeDoResponse
-    ) -> None:
-        """Tracks the `scrape.do-rid` header using a history list to detect
-        Scrape.do session rotations.
-
-        info: `session_id`
-            The client attempts to track Scrape.do session rotations by
-            checking the `scrape.do-rid` header for changes between requests.
-
-        warning: Session State
-            If the proxy address associated with the current `session_id`
-            rotates, any target-specific WAF state or cookies accumulated on
-            that node will be lost.
-
-        tip: Client Configuration
-            To raise an exception when a change in this header's value is
-            detected, you can set `raise_on_rid_rotation=True during
-            initialization.
-
-        Args:
-            request (PreparedScrapeDoRequest): The executed request.
-            response (ScrapeDoResponse): The returned `ScrapeDoResponse` object
-
-        Raises:
-            RotatedSessionError: If `raise_on_rid_rotation` is True and a
-                change to the `scrape.do-rid` header is detected after more
-                than one request with the same `session_id` parameter.
-        """
-        session_id = request.api_params.session_id
-        current_rid = response.rid
-
-        if session_id is not None and current_rid:
-            sid_str = str(session_id)
-
-            if sid_str not in self._active_sessions:
-                self._active_sessions[sid_str] = [current_rid]
-                return
-
-            history = self._active_sessions[sid_str]
-            last_known_rid = history[-1]
-
-            if last_known_rid != current_rid:
-                msg = (
-                    f"Scrape.do session expired for sessionId='{sid_str}'. "
-                    f"Previous RID: {last_known_rid} | New RID: {current_rid}."
-                    f" Target WAF state or WAF cookies may be invalidated."
-                    )
-
-                history.append(current_rid)
-
-                if self.raise_on_rid_rotation:
-                    raise RotatedSessionError(
-                        message=msg,
-                        raw_response=response.httpx_response,
-                        request=request,
-                        response=response,
-                        last_known_rid=last_known_rid,
-                        new_rid=current_rid,
-                        session_id=session_id
-                        )
-                else:
-                    logger.warning(msg)

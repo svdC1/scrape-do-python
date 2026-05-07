@@ -214,35 +214,25 @@ class ServerError(APIResponseError):
 
 
 class RotatedSessionError(ScrapeDoError):
-    """Raised when Scrape.do rotates the underlying proxy node for an active
-    session.
+    """
+    Raised when a user-defined `session_validator` determines that the target
+    website's state has been lost (e.g., logged out, CAPTCHA triggered),
+    indicating that Scrape.do silently rotated the proxy exit node.
 
     Args:
-        message (str): The error message to be displayed.
-        raw_response (httpx.Response): The raw HTTPX response object
-        request (PreparedScrapeDoRequest): The original request configuration.
-        response (ScrapeDoResponse): The successful HTTP response containing
-            the new RID state.
-        last_known_rid (str): The RID found in the response of the last
-            successful request made with this `session_id` by the
-            `ScrapeDoClient` instance.
-        new_rid (str): The RID found in the response of the request which
-            caused the exception.
-        session_id (int): The `RequestParameters.session_id` that generated the
-            RIDs
+        message (str): Error message to be displayed
+        raw_response (httpx.Response): The raw HTTP response object.
+        request (PreparedScrapeDoRequest): Object containing the
+            request's information
+        response (Optional[ScrapeDoResponse]): Object containing the response's
+            information
     """
     def __init__(
         self,
         message: str,
         raw_response: httpx.Response,
         request: PreparedScrapeDoRequest,
-        response: ScrapeDoResponse,
-        last_known_rid: str,
-        new_rid: str,
-        session_id: int,
+        response: ScrapeDoResponse
     ):
-        self.new_rid = new_rid
-        self.session_id = session_id
-        self.last_known_rid = last_known_rid
         self.raw_response = raw_response
         super().__init__(message, request, response)

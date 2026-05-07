@@ -144,7 +144,8 @@ def test_raise_for_status_auth_throttle_trap(make_request, make_response):
 
 def test_rotated_session_error_init(make_request, make_response):
     """
-    Ensures RotatedSessionError is properly initialized
+    Ensures RotatedSessionError is properly initialized with the
+    user-defined session_validator signature.
     """
 
     req = make_request()
@@ -154,16 +155,10 @@ def test_rotated_session_error_init(make_request, make_response):
         "Session Expired",
         resp,
         req,
-        scrape_do_resp,
-        "last_known_rid",
-        "new_rid",
-        100
+        scrape_do_resp
         )
 
     assert err.message == "Session Expired"
-    assert err.raw_response == resp
+    assert err.raw_response is resp
     assert err.request is req
     assert err.response is scrape_do_resp
-    assert err.last_known_rid == "last_known_rid"
-    assert err.new_rid == "new_rid"
-    assert err.session_id == 100

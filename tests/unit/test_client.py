@@ -505,10 +505,10 @@ class TestClientExecutionEngine:
         mock_backoff.assert_has_calls([mocker.call(0), mocker.call(1)])
 
 
-class TestClientSessionState:
+class TestClientSessionValidator:
 
     @respx.mock
-    def test_consistent_rid_no_action(
+    def test_validator_true_raises_rotated_session_error(
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
@@ -516,26 +516,51 @@ class TestClientSessionState:
         mock_sleep
     ):
         """
-        Ensures that multiple requests keeping the same RID do not trigger
-        warnings.
+        Ensures the SDK raises RotatedSessionError when the user-provided
+        validator detects a lost session.
         """
-        req1 = make_request(session_id=10)
-        req2 = make_request(session_id=10)
+        req = make_request(session_id=10)
 
-        # The rid remains "node-A" for both requests
         respx.get(url__startswith="https://api.scrape.do").respond(
             status_code=200,
-            headers={"scrape.do-rid": "node-A"}
+            json={"html": "<html>Logged out</html>"}
         )
 
-        mock_sync_client.execute(req1)
-        mock_sync_client.execute(req2)
+        def detect_logged_out(response):
+            return "Logged out" in response.httpx_response.text
 
-        assert len(mock_sync_client._active_sessions["10"]) == 1
-        assert mock_sync_client._active_sessions["10"][-1] == "node-A"
+        with pytest.raises(RotatedSessionError) as exc_info:
+            mock_sync_client.execute(req, detect_logged_out)
+
+        err = exc_info.value
+        assert err.request is req
+        assert err.response is not None
+        assert err.raw_response is not None
 
     @respx.mock
-    def test_rotated_rid_logs_warning_by_default(
+    def test_validator_false_returns_response_unchanged(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures a validator that returns False yields the response as normal.
+        """
+        req = make_request(session_id=10)
+
+        respx.get(url__startswith="https://api.scrape.do").respond(
+            status_code=200,
+            json={"html": "<html>Still logged in</html>"}
+        )
+
+        response = mock_sync_client.execute(req, lambda _: False)
+
+        assert response.scrape_do_status_code == 200
+
+    @respx.mock
+    def test_validator_skipped_when_no_session_id(
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
@@ -544,36 +569,21 @@ class TestClientSessionState:
         mock_sleep
     ):
         """
-        Ensures a session rotation logs a warning when
-        raise_on_rid_rotation=False.
+        Ensures the validator is never invoked when session_id is None,
+        even if a validator is provided.
         """
-        req1 = make_request(session_id=10)
-        req2 = make_request(session_id=10)
+        req = make_request(session_id=None)
 
-        # Spy on the client's internal logger
-        mock_logger = mocker.patch("scrape_do.client.logger.warning")
+        respx.get(url__startswith="https://api.scrape.do").respond(200)
 
-        route = respx.get(url__startswith="https://api.scrape.do")
+        validator = mocker.MagicMock(return_value=True)
+        response = mock_sync_client.execute(req, validator)
 
-        # Simulate the proxy rotating the session
-        route.side_effect = [
-            httpx.Response(200, headers={"scrape.do-rid": "node-A"}),
-            httpx.Response(200, headers={"scrape.do-rid": "node-B"})
-        ]
-
-        mock_sync_client.execute(req1)
-        mock_sync_client.execute(req2)
-        session_id_hist = mock_sync_client._active_sessions["10"]
-        mock_logger.assert_called_once()
-        log_msg = mock_logger.call_args[0][0]
-
-        assert "Previous RID: node-A" in log_msg
-        assert "New RID: node-B" in log_msg
-        # The history should now contain both RIDs
-        assert session_id_hist == ["node-A", "node-B"]
+        validator.assert_not_called()
+        assert response.scrape_do_status_code == 200
 
     @respx.mock
-    def test_rotated_rid_raises_exception_when_configured(
+    def test_no_validator_returns_response(
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
@@ -581,36 +591,164 @@ class TestClientSessionState:
         mock_sleep
     ):
         """
-        Ensures a node rotation raises RotatedSessionError when configured to
-        do so.
+        Ensures a stateful request without a validator returns the response
+        as-is, with no implicit session checking.
         """
-        mock_sync_client.raise_on_rid_rotation = True
+        req = make_request(session_id=10)
 
-        req1 = make_request(session_id=10)
-        req2 = make_request(session_id=10)
+        respx.get(url__startswith="https://api.scrape.do").respond(200)
+
+        response = mock_sync_client.execute(req)
+
+        assert response.scrape_do_status_code == 200
+
+
+class TestClientEventHooks:
+
+    @respx.mock
+    def test_request_hook_fires_once_regardless_of_retries(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mocker,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures the request hook fires exactly once before the retry loop,
+        even when the SDK retries a 429/502 chain.
+        """
+        req = make_request()
+        request_hook = mocker.MagicMock()
+        mock_sync_client.event_hooks = {"request": [request_hook]}
 
         route = respx.get(url__startswith="https://api.scrape.do")
         route.side_effect = [
-            httpx.Response(200, headers={"scrape.do-rid": "node-A"}),
-            httpx.Response(200, headers={"scrape.do-rid": "node-B"})
-        ]
+            httpx.Response(429),
+            httpx.Response(502),
+            httpx.Response(200)
+            ]
 
-        # First request establishes the session
-        mock_sync_client.execute(req1)
+        mock_sync_client.execute(req)
 
-        # Second request detects the rotation and halts
-        with pytest.raises(RotatedSessionError) as exc_info:
-            mock_sync_client.execute(req2)
-
-        # Verify the exception's telemetry data
-        err = exc_info.value
-        assert err.last_known_rid == "node-A"
-        assert err.new_rid == "node-B"
-        assert err.session_id == 10
-        assert err.response is not None
+        request_hook.assert_called_once_with(req)
 
     @respx.mock
-    def test_no_session_id_skips_tracking(
+    def test_response_hook_fires_once_on_success(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mocker,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures the response hook fires exactly once when a request succeeds.
+        """
+        req = make_request()
+        response_hook = mocker.MagicMock()
+        mock_sync_client.event_hooks = {"response": [response_hook]}
+
+        respx.get(url__startswith="https://api.scrape.do").respond(200)
+
+        response = mock_sync_client.execute(req)
+
+        response_hook.assert_called_once_with(response)
+
+    @respx.mock
+    def test_response_hook_fires_after_retries_exhausted(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mocker,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures the response hook fires for the final response when the
+        retry budget is exhausted on a retryable status.
+        """
+        req = make_request()
+        response_hook = mocker.MagicMock()
+        mock_sync_client.event_hooks = {"response": [response_hook]}
+
+        respx.get(url__startswith="https://api.scrape.do").respond(502)
+
+        response = mock_sync_client.execute(req)
+
+        response_hook.assert_called_once_with(response)
+        assert response.scrape_do_status_code == 502
+
+    @respx.mock
+    def test_retry_hook_fires_with_response_on_retryable_status(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mocker,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures the retry hook receives (attempt, request, response, None)
+        when the SDK retries on a 429/502/510 status.
+        """
+        req = make_request()
+        retry_hook = mocker.MagicMock()
+        mock_sync_client.event_hooks = {"retry": [retry_hook]}
+
+        route = respx.get(url__startswith="https://api.scrape.do")
+        route.side_effect = [
+            httpx.Response(429),
+            httpx.Response(200)
+            ]
+
+        mock_sync_client.execute(req)
+
+        retry_hook.assert_called_once()
+        attempt, hook_request, hook_response, hook_exc = (
+            retry_hook.call_args[0]
+            )
+        assert attempt == 0
+        assert hook_request is req
+        assert hook_response is not None
+        assert hook_response.scrape_do_status_code == 429
+        assert hook_exc is None
+
+    @respx.mock
+    def test_retry_hook_fires_with_exception_on_request_error(
+        self,
+        mock_sync_client: ScrapeDoClient,
+        make_request,
+        mocker,
+        mock_env_vars,
+        mock_sleep
+    ):
+        """
+        Ensures the retry hook receives (attempt, request, None, exc) when
+        the SDK retries due to an httpx.RequestError.
+        """
+        mock_sync_client.max_retries = 1
+        req = make_request()
+        retry_hook = mocker.MagicMock()
+        mock_sync_client.event_hooks = {"retry": [retry_hook]}
+
+        route = respx.get(url__startswith="https://api.scrape.do")
+        connect_err = httpx.ConnectError("transport down")
+        route.side_effect = [connect_err, httpx.Response(200)]
+
+        mock_sync_client.execute(req)
+
+        retry_hook.assert_called_once()
+        attempt, hook_request, hook_response, hook_exc = (
+            retry_hook.call_args[0]
+            )
+        assert attempt == 0
+        assert hook_request is req
+        assert hook_response is None
+        assert hook_exc is connect_err
+
+    @respx.mock
+    def test_no_event_hooks_default_does_not_break(
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
@@ -618,19 +756,16 @@ class TestClientSessionState:
         mock_sleep
     ):
         """
-        Ensures that tracking is bypassed completely if no session_id is
-        requested.
+        Regression: a client constructed without event_hooks must execute
+        cleanly without raising AttributeError on the hook call sites.
         """
-        req1 = make_request(session_id=None)
-        req2 = make_request(session_id=None)
+        req = make_request()
+        # mock_sync_client is constructed with event_hooks=None; the SDK
+        # should normalize this to an empty dict at construction time.
+        assert mock_sync_client.event_hooks == {}
 
-        route = respx.get(url__startswith="https://api.scrape.do")
-        route.side_effect = [
-            httpx.Response(200, headers={"scrape.do-rid": "node-A"}),
-            httpx.Response(200, headers={"scrape.do-rid": "node-B"})
-        ]
+        respx.get(url__startswith="https://api.scrape.do").respond(200)
 
-        mock_sync_client.execute(req1)
-        mock_sync_client.execute(req2)
+        response = mock_sync_client.execute(req)
 
-        assert len(mock_sync_client._active_sessions) == 0
+        assert response.scrape_do_status_code == 200
