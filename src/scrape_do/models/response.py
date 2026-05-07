@@ -419,6 +419,19 @@ class ScrapeDoResponse:
         return self._raw_response
 
     @property
+    def status_code(self) -> int:
+        """Convenience accessor for the underlying HTTPX response status code.
+
+        Equivalent to `response.httpx_response.status_code`. Distinct from
+        `target_status_code` and `scrape_do_status_code`, which interpret the
+        Scrape.do response envelope.
+
+        Returns:
+            The HTTP status code of the response received from `api.scrape.do`.
+        """
+        return self.httpx_response.status_code
+
+    @property
     def request(self) -> PreparedScrapeDoRequest:
         """Exposes the original, validated request configuration.
 

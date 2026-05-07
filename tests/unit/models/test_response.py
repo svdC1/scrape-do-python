@@ -287,6 +287,34 @@ class TestScrapeDoResponseValidation:
 
         resp = ScrapeDoResponse(req, resp).raise_for_status()
 
+    @staticmethod
+    def test_status_code_passthrough(example_url, mock_json_payload):
+        """
+        Ensures `status_code` is a raw passthrough to the underlying
+        httpx.Response status code, distinct from envelope-aware accessors
+        like `target_status_code`.
+        """
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True
+                )
+            )
+        # JSON mode pulls the target's reported status (envelope) and the
+        # proxy's gateway status (raw httpx) apart.
+        headers = {"scrape.do-initial-status-code": "200"}
+        http_resp = httpx.Response(
+            202, json=mock_json_payload, headers=headers
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        # Raw outer status from api.scrape.do.
+        assert response.status_code == 202
+        # Envelope-aware: target reported 200 via JSON statusCode.
+        assert response.target_status_code == 200
+        assert response.scrape_do_status_code == 202
+
 
 class TestScrapeDoResponseSerialization:
 

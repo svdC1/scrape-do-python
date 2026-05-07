@@ -109,7 +109,7 @@ class TestLiveProxyErrorDetection:
         """
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/delay/10",
-            timeout=2000
+            timeout=5000
             )
 
         # True proxy error
@@ -164,7 +164,7 @@ class TestLiveProxyErrorDetection:
         """
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/delay/10",
-            timeout=2000,
+            timeout=5000,
             transparent_response=True
         )
 
@@ -201,7 +201,7 @@ class TestLiveDataBoundaries:
         assert response.status_code == 200
 
         # Parse the echo response
-        echoed_data = response.json()
+        echoed_data = response.httpx_response.json()
 
         # httpbin puts JSON payloads inside the 'json' key of its response
         assert echoed_data.get("json") == test_payload
@@ -246,7 +246,7 @@ class TestLiveDataBoundaries:
 
         assert response.status_code == 200
 
-        echoed_data = response.json()
+        echoed_data = response.httpx_response.json()
         returned_cookies = echoed_data.get("cookies", {})
 
         assert returned_cookies.get("session_token") == "secret_123"
@@ -274,7 +274,7 @@ class TestLiveSessionTelemetry:
             session_id=888,
             super=True
             )
-        ip1 = resp1.json().get("origin")
+        ip1 = resp1.httpx_response.json().get("origin")
         rid1 = resp1.rid
 
         logger.info(f"Session 888 (Req 1) -> RID: {rid1} | IP: {ip1}")
@@ -285,7 +285,7 @@ class TestLiveSessionTelemetry:
             session_id=888,
             super=True
             )
-        ip2 = resp2.json().get("origin")
+        ip2 = resp2.httpx_response.json().get("origin")
         rid2 = resp2.rid
 
         logger.info(f"Session 888 (Req 2) -> RID: {rid2} | IP: {ip2}")
@@ -312,7 +312,7 @@ class TestLiveSessionTelemetry:
             session_id=101,
             super=True
             )
-        ip_a = resp_a.json().get("origin")
+        ip_a = resp_a.httpx_response.json().get("origin")
         rid_a = resp_a.rid
 
         logger.info(f"Session 101 -> RID: {rid_a} | IP: {ip_a}")
@@ -322,7 +322,7 @@ class TestLiveSessionTelemetry:
             session_id=909,
             super=True
             )
-        ip_b = resp_b.json().get("origin")
+        ip_b = resp_b.httpx_response.json().get("origin")
         rid_b = resp_b.rid
 
         logger.info(f"Session 909 -> RID: {rid_b} | IP: {ip_b}")
@@ -355,7 +355,7 @@ class TestLiveSessionTelemetry:
             session_id=session_id,
             super=True
             )
-        initial_ip = resp_baseline.json().get("origin")
+        initial_ip = resp_baseline.httpx_response.json().get("origin")
         initial_rid = resp_baseline.rid
 
         logger.info(
@@ -376,7 +376,7 @@ class TestLiveSessionTelemetry:
                 session_id=session_id,
                 super=True
                 )
-            current_ip = resp_next.json().get("origin")
+            current_ip = resp_next.httpx_response.json().get("origin")
             current_rid = resp_next.rid
 
             logger.info((

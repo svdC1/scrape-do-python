@@ -17,10 +17,7 @@ from httpx import (
     BaseTransport,
     RequestError
     )
-from httpx._config import (
-    DEFAULT_TIMEOUT_CONFIG,
-    DEFAULT_LIMITS
-)
+from httpx._config import DEFAULT_LIMITS
 from httpx._types import (
     TimeoutTypes,
     CertTypes,
@@ -164,8 +161,10 @@ class ScrapeDoClient:
             authentication.
         http1 (bool): Enable HTTP/1.1 support.
         http2 (bool): Enable HTTP/2 multiplexing for higher concurrency.
-        timeout (TimeoutTypes): The default timeout configuration applied to
-            all network requests.
+        timeout (TimeoutTypes): The default timeout (in seconds) applied to
+            all network phases. Defaults to 60s, raised from httpx's 5s
+            default to accommodate Scrape.do proxy round-trips
+            (browser rendering, geo-routing, fingerprinting).
         limits (Limits): Configuration for maximum connection pool sizes.
         event_hooks (Optional[Mapping[str, list[Callable[..., Any]]]]): Custom
             hooks injected into the request/response lifecycle for logging or
@@ -186,7 +185,7 @@ class ScrapeDoClient:
         cert: Optional[CertTypes] = None,
         http1: bool = True,
         http2: bool = False,
-        timeout: TimeoutTypes = DEFAULT_TIMEOUT_CONFIG,
+        timeout: TimeoutTypes = 60.0,
         limits: Limits = DEFAULT_LIMITS,
         event_hooks: Optional[Mapping[str, list[Callable[..., Any]]]] = None,
         transport: Optional[BaseTransport] = None,

@@ -76,6 +76,18 @@ class TestClientInitialization:
             assert not transport._pool._http2
             assert transport._pool._max_connections == 50
 
+    def test_default_timeout_is_60_seconds(self, mock_env_vars):
+        """
+        Ensures the SDK's default timeout (60s across all phases) overrides
+        httpx's 5s default to comfortably accommodate proxy round-trips.
+        """
+        with ScrapeDoClient(api_token="test") as client:
+            timeout = client._http_client.timeout
+            assert timeout.connect == 60.0
+            assert timeout.read == 60.0
+            assert timeout.write == 60.0
+            assert timeout.pool == 60.0
+
     def test_explicit_close(self, mock_env_vars, mocker):
         """
         Ensures calling client.close() delegates to the httpx.Client
