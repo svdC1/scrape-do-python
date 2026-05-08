@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 import pytest
 from scrape_do.client import ScrapeDoClient
 from scrape_do.models import (
@@ -9,7 +11,14 @@ logger = logging.getLogger("integration_tests")
 
 pytestmark = pytest.mark.integration
 
-HTTPBIN_BASE = "https://httpbingo.org"
+HTTPBIN_BASE = os.getenv("HTTPBIN_BASE", "https://httpbingo.org")
+
+_TOKEN_RE = re.compile(r"(?i)([?&]token=)[^&]+")
+
+
+def _redact_token(url) -> str:
+    """Strip the `token=...` query parameter from a URL string."""
+    return _TOKEN_RE.sub(r"\1REDACTED", str(url))
 
 
 class TestLiveProxyErrorDetection:
@@ -29,7 +38,7 @@ class TestLiveProxyErrorDetection:
         raw_resp = response.httpx_response
 
         logger.info("\n--- [Scrape.do Raw Response Trace] ---")
-        logger.info(f"Target URL: {raw_resp.request.url}")
+        logger.info(f"Target URL: {response.target_url}")
         logger.info(f"HTTPX Status: {raw_resp.status_code}")
         logger.info(f"Raw Headers: {dict(raw_resp.headers)}")
         logger.info(f"Raw Body (First 200 chars): {raw_resp.text[:200]}")

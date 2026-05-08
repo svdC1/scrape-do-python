@@ -329,15 +329,14 @@ class ScrapeDoClient:
             custom configurations, or task reusability.
 
         warning: Sessions (`sessionId`)
-            - If you configure a request with a `session_id`, Scrape.do will
-              attempt to route your traffic through the same proxy address.
-              However, it can still silently rotate this address for various
-              reasons. If it rotates during a multi-step scraping task, any
-              target-specific WAF state or cookies accumulated will be lost,
-              which may cause the task to fail.
+            If you configure a request with a `session_id`, Scrape.do will
+            attempt to route your traffic through the same proxy address.
+            However, it can still silently rotate this address for various
+            reasons. If it rotates during a multi-step scraping task, any
+            target-specific WAF state or cookies accumulated will be lost,
+            which may cause the task to fail.
 
         tip: Validating Sessions (`session_validator`)
-
             - In order to prevent unexpected errors due to dropped sessions,
               you can pass a custom function to the client's `execute` method
               `session_validator` argument.
