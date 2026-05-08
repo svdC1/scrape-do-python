@@ -39,8 +39,8 @@ def setup_integration_logging():
     # Readable format for manual debugging
     formatter = logging.Formatter(
         fmt=(
-            "\n\n|| Time: {asctime} ||\n || Test File: {filename} ||\n"
-            "|| Test Function: {funcName} ||\n || Message : {message} ||"
+            "\n\n|| Time: {asctime} ||\n|| Test File: {filename} ||\n"
+            "|| Test Function: {funcName} ||\n|| Message : {message} ||"
             ),
         style="{",
         datefmt="%Y-%m-%d %H:%M:%S"

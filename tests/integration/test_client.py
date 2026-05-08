@@ -38,7 +38,7 @@ class TestLiveProxyErrorDetection:
         """
         raw_resp = response.httpx_response
 
-        logger.info("--- [Scrape.do Raw Response Trace] ---")
+        logger.info("[Scrape.do Raw Response Trace]")
         logger.info(f"Target URL: {response.target_url}")
         logger.info(f"HTTPX Status: {raw_resp.status_code}")
         logger.info(f"Raw Headers: {dict(raw_resp.headers)}")
@@ -103,7 +103,6 @@ class TestLiveProxyErrorDetection:
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/status/429",
             super=True,
-            render=True,
             disable_retry=True,
             transparent_response=True
             )
@@ -125,7 +124,6 @@ class TestLiveProxyErrorDetection:
             f"{HTTPBIN_BASE}/delay/10",
             timeout=5000,
             super=True,
-            render=True,
             disable_retry=True,
             transparent_response=True
             )
@@ -166,7 +164,6 @@ class TestLiveProxyErrorDetection:
             f"{HTTPBIN_BASE}/status/500",
             transparent_response=True,
             super=True,
-            render=True,
             disable_retry=True
         )
 
@@ -188,7 +185,6 @@ class TestLiveProxyErrorDetection:
             timeout=5000,
             transparent_response=True,
             super=True,
-            render=True,
             disable_retry=True
         )
 
@@ -245,7 +241,6 @@ class TestLiveDataBoundaries:
         response = default_sync_client.get(
             f"{HTTPBIN_BASE}/image/png",
             super=True,
-            render=True,
             disable_retry=True,
             transparent_response=True
             )
@@ -270,13 +265,12 @@ class TestLiveDataBoundaries:
         Ensures the `set_cookies` parameter correctly injects state into the
         target request.
         """
-        injected_cookie = "session_token=secret_123"
+        injected_cookie = "session_token=secret_123;"
 
         response = default_sync_client.get(
             f"{HTTPBIN_BASE}/cookies",
             set_cookies=injected_cookie,
             super=True,
-            render=True,
             disable_retry=True,
             transparent_response=True
         )
