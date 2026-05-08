@@ -11,7 +11,8 @@ logger = logging.getLogger("integration_tests")
 
 pytestmark = pytest.mark.integration
 
-HTTPBIN_BASE = os.getenv("HTTPBIN_BASE", "https://httpbingo.org")
+# Uses `go-httpbin`
+HTTPBIN_BASE = os.getenv("HTTPBIN_BASE", "https://httpbin.co")
 
 _TOKEN_RE = re.compile(r"(?i)([?&]token=)[^&]+")
 
@@ -37,7 +38,7 @@ class TestLiveProxyErrorDetection:
         """
         raw_resp = response.httpx_response
 
-        logger.info("\n--- [Scrape.do Raw Response Trace] ---")
+        logger.info("--- [Scrape.do Raw Response Trace] ---")
         logger.info(f"Target URL: {response.target_url}")
         logger.info(f"HTTPX Status: {raw_resp.status_code}")
         logger.info(f"Raw Headers: {dict(raw_resp.headers)}")
@@ -89,7 +90,6 @@ class TestLiveProxyErrorDetection:
         logger.info(
             f"SDK Conclusion -> is_proxy_error: {response.is_proxy_error}"
             )
-        logger.info("--------------------------------------\n")
 
         assert response.is_proxy_error is expected_is_proxy_error
 
@@ -103,7 +103,9 @@ class TestLiveProxyErrorDetection:
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/status/429",
             super=True,
-            render=True
+            render=True,
+            disable_retry=True,
+            transparent_response=True
             )
 
         # Target error, proxy succeeded
@@ -123,7 +125,9 @@ class TestLiveProxyErrorDetection:
             f"{HTTPBIN_BASE}/delay/10",
             timeout=5000,
             super=True,
-            render=True
+            render=True,
+            disable_retry=True,
+            transparent_response=True
             )
 
         # True proxy error
@@ -162,7 +166,8 @@ class TestLiveProxyErrorDetection:
             f"{HTTPBIN_BASE}/status/500",
             transparent_response=True,
             super=True,
-            render=True
+            render=True,
+            disable_retry=True
         )
 
         # The target failed, not the proxy.
@@ -183,7 +188,8 @@ class TestLiveProxyErrorDetection:
             timeout=5000,
             transparent_response=True,
             super=True,
-            render=True
+            render=True,
+            disable_retry=True
         )
 
         # The proxy timed out.
@@ -214,7 +220,9 @@ class TestLiveDataBoundaries:
             f"{HTTPBIN_BASE}/post",
             body=test_payload,
             payload_type="json",
-            super=True
+            super=True,
+            disable_retry=True,
+            transparent_response=True
         )
 
         assert response.status_code == 200
@@ -237,7 +245,9 @@ class TestLiveDataBoundaries:
         response = default_sync_client.get(
             f"{HTTPBIN_BASE}/image/png",
             super=True,
-            render=True
+            render=True,
+            disable_retry=True,
+            transparent_response=True
             )
 
         assert response.status_code == 200
@@ -266,7 +276,9 @@ class TestLiveDataBoundaries:
             f"{HTTPBIN_BASE}/cookies",
             set_cookies=injected_cookie,
             super=True,
-            render=True
+            render=True,
+            disable_retry=True,
+            transparent_response=True
         )
 
         assert response.status_code == 200
