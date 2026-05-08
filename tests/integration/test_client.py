@@ -100,7 +100,11 @@ class TestLiveProxyErrorDetection:
         """
         Checks logic when the target explicitly rate-limits the proxy.
         """
-        response = no_retry_sync_client.get(f"{HTTPBIN_BASE}/status/429")
+        response = no_retry_sync_client.get(
+            f"{HTTPBIN_BASE}/status/429",
+            super=True,
+            render=True
+            )
 
         # Target error, proxy succeeded
         self._validate_and_log_error_state(
@@ -117,7 +121,9 @@ class TestLiveProxyErrorDetection:
         """
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/delay/10",
-            timeout=5000
+            timeout=5000,
+            super=True,
+            render=True
             )
 
         # True proxy error
@@ -154,7 +160,9 @@ class TestLiveProxyErrorDetection:
         """
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/status/500",
-            transparent_response=True
+            transparent_response=True,
+            super=True,
+            render=True
         )
 
         # The target failed, not the proxy.
@@ -173,7 +181,9 @@ class TestLiveProxyErrorDetection:
         response = no_retry_sync_client.get(
             f"{HTTPBIN_BASE}/delay/10",
             timeout=5000,
-            transparent_response=True
+            transparent_response=True,
+            super=True,
+            render=True
         )
 
         # The proxy timed out.
@@ -203,7 +213,8 @@ class TestLiveDataBoundaries:
         response = default_sync_client.post(
             f"{HTTPBIN_BASE}/post",
             body=test_payload,
-            payload_type="json"
+            payload_type="json",
+            super=True
         )
 
         assert response.status_code == 200
@@ -223,7 +234,11 @@ class TestLiveDataBoundaries:
         """
 
         # Request a raw PNG image
-        response = default_sync_client.get(f"{HTTPBIN_BASE}/image/png")
+        response = default_sync_client.get(
+            f"{HTTPBIN_BASE}/image/png",
+            super=True,
+            render=True
+            )
 
         assert response.status_code == 200
 
@@ -249,7 +264,9 @@ class TestLiveDataBoundaries:
 
         response = default_sync_client.get(
             f"{HTTPBIN_BASE}/cookies",
-            set_cookies=injected_cookie
+            set_cookies=injected_cookie,
+            super=True,
+            render=True
         )
 
         assert response.status_code == 200
