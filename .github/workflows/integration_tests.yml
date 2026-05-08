@@ -35,11 +35,10 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy ephemeral go-httpbin
-        id: deploy_httpbin
         run: |
           SERVICE="scrape-do-httpbin-${{ github.run_id }}"
           gcloud run deploy "$SERVICE" \
-            --image=ghcr.io/mccutchen/go-httpbin:latest \
+            --image=docker.io/mccutchen/go-httpbin:latest \
             --region=us-central1 \
             --port=8080 \
             --allow-unauthenticated \
@@ -51,7 +50,6 @@ jobs:
             --region=us-central1 \
             --format='value(status.url)')
           echo "HTTPBIN_BASE=$URL" >> "$GITHUB_ENV"
-          echo "service_name=$SERVICE" >> "$GITHUB_OUTPUT"
 
       - name: Run Integration Tests
         env:
@@ -62,7 +60,7 @@ jobs:
         if: always()
         run: |
           gcloud run services delete \
-            "${{ steps.deploy_httpbin.outputs.service_name }}" \
+            "scrape-do-httpbin-${{ github.run_id }}" \
             --region=us-central1 \
             --quiet || true
 
