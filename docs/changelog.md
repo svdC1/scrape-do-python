@@ -8,6 +8,24 @@
 
 ---
 
+## `0.1.1` — 2026-05-09
+
+### Added
+
+- Curated public re-exports in [`scrape_do/__init__.py`](https://github.com/svdC1/scrape-do-python/blob/main/src/scrape_do/__init__.py) so common imports work as `from scrape_do import ScrapeDoClient, RequestParameters, ...` rather than digging into submodules.
+- `py.typed` PEP 561 marker so downstream type-checkers (`mypy`, `pyright`) consume the package's type hints.
+- Trove classifiers in package metadata — PyPI's "Python" sidebar and shields.io's `pypi/pyversions` badge now populate correctly.
+
+### Removed
+
+- Empty `scrape_do/namespaces/` placeholder folder (was scaffolding from before the roadmap solidified; will be replaced by `plugins/` in `0.4+`).
+
+### Documentation
+
+- Planned package layout added to [`Roadmap`](roadmap.md)
+
+[`0.1.1`](https://github.com/svdC1/scrape-do-python/releases/tag/v0.1.1)
+
 ## `0.1.0` — 2026-05-08
 
 Initial release. Synchronous client surface.

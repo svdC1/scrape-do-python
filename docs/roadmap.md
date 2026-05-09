@@ -65,6 +65,77 @@
 
 ---
 
+## Planned Package Layout
+
+???+ warning "*Speculative*"
+    - A starting point, not a commitment
+    
+    - Each milestone may surface design constraints that justify deviation
+    
+    - Version slots above are firmer than the file paths below
+
+```yaml title="File Structure"
+src/scrape_do/
+│
+├─ __init__.py  # (1)!
+├─ py.typed  # (2)!
+├─ exceptions.py  # (3)!
+├─ constants.py
+├─ abc.py
+│
+│ # (4)!
+├─ client.py  # (5)!
+├─ async_client.py # (6)!
+├─ proxy_client.py # (7)!
+├─ async_proxy_client.py # (8)!
+├─ models/ # (9)!
+│
+├─ async_api/ # (10)!
+│  │
+│  ├─ __init__.py
+│  ├─ client.py
+│  ├─ async_client.py
+│  ├─ models/ # (11)!
+│  └─ exceptions.py # (12)!
+│
+│
+└─ plugins/ # (13)!
+   │
+   ├─ __init__.py
+   ├─ google/ # (14)!
+   │  │
+   │  ├─ __init__.py
+   │  ├─ client.py
+   │  ├─ async_client.py
+   │  └─ models/ # (15)!
+   │
+   └─ amazon/        
+      │    
+      ├─ __init__.py 
+      ├─ client.py
+      ├─ async_client.py
+      └─ models/ # (16)!
+```
+
+1. Curated Public Re-Exports
+2. PEP 561 Marker
+3. Base Hierarchy (sub-packages may extend)
+4. `0.1` + `0.2` - api.scrape.do + proxy.scrape.do 
+5. ScrapeDoClient (sync, api.scrape.do) — `0.1`
+6. AsyncScrapeDoClient — `0.2`
+7. ScrapeDoProxyClient (proxy.scrape.do) — `0.2`
+8. AsyncScrapeDoProxyClient — `0.2`
+9. Request / Response models for the four above
+10. `0.3` - q.scrape.do — Different API surface (server-side job queue)
+11. `job_id`, `polling`, `results`, ...
+12. Queue-Specific (if needed)
+13. `0.4` + `0.5` - Each plugin is a sub-package
+14. `0.4`
+15. Search-Specific
+16. Product/Listing-Specific
+    
+---
+
 ## Suggestions Are Welcome
 
 ???+ tip "Influence The Roadmap"

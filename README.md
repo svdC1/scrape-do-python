@@ -29,7 +29,7 @@ pip install scrape-do-python
 ## Quickstart
 
 ```python
-from scrape_do.client import ScrapeDoClient
+from scrape_do import ScrapeDoClient
 
 # API Token pulled from SCRAPE_DO_API_KEY env variable
 # Can also be provided via 'api_token' argument
