@@ -17,6 +17,12 @@ dependencies = [
     "pydantic>=2.0.0"
 ]
 
+[project.urls]
+Documentation = "https://svdc1.github.io/scrape-do-python"
+Repository = "https://github.com/svdC1/scrape-do-python"
+Issues = "https://github.com/svdC1/scrape-do-python/issues"
+Changelog = "https://github.com/svdC1/scrape-do-python/blob/main/.github/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
