@@ -63,7 +63,7 @@ jobs:
     
     environment:
       name: pypi
-      url: https://pypi.org/p/scrape-do
+      url: https://pypi.org/p/scrape-do-python
     permissions:
       id-token: write 
       contents: read
