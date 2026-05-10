@@ -33,6 +33,11 @@ Example:
     ```
 """
 
+from scrape_do.async_client import (
+    AsyncClientEventHooks,
+    AsyncScrapeDoClient,
+    AsyncSessionValidator,
+)
 from scrape_do.client import (
     ScrapeDoClient,
     SyncClientEventHooks,
@@ -56,6 +61,9 @@ from scrape_do.models import (
 
 __all__ = [
     "APIConnectionError",
+    "AsyncClientEventHooks",
+    "AsyncScrapeDoClient",
+    "AsyncSessionValidator",
     "AuthenticationError",
     "AuthenticationThrottleError",
     "BadRequestError",

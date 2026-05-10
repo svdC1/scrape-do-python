@@ -3,11 +3,13 @@ Fixtures for the integration tests.
 """
 
 import pytest
+import pytest_asyncio
 import logging
 import os
 from pathlib import Path
 from datetime import datetime
 from scrape_do.client import ScrapeDoClient
+from scrape_do.async_client import AsyncScrapeDoClient
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -83,4 +85,22 @@ def no_retry_sync_client():
     Provides a live ScrapeDoClient with retries disabled
     """
     with ScrapeDoClient(max_retries=0) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def default_async_client():
+    """
+    Provides a live AsyncScrapeDoClient with default configurations.
+    """
+    async with AsyncScrapeDoClient() as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def no_retry_async_client():
+    """
+    Provides a live AsyncScrapeDoClient with retries disabled.
+    """
+    async with AsyncScrapeDoClient(max_retries=0) as client:
         yield client

@@ -3,10 +3,14 @@ Fixtures for the unit tests.
 """
 
 import pytest
+import pytest_asyncio
 import httpx
 from unittest.mock import MagicMock
 from scrape_do.client import (
     ScrapeDoClient
+    )
+from scrape_do.async_client import (
+    AsyncScrapeDoClient
     )
 
 
@@ -154,3 +158,25 @@ def mock_sleep(mocker) -> MagicMock:
      Mocks `time.sleep` across an entire test function.
     """
     return mocker.patch("time.sleep", return_value=None)
+
+
+@pytest_asyncio.fixture
+async def mock_async_client():
+    """
+    Yields a cleanly initialized AsyncScrapeDoClient for async testing.
+    """
+    async with AsyncScrapeDoClient(api_token='dummy_token') as client:
+        yield client
+
+
+@pytest.fixture
+def mock_async_sleep(mocker) -> MagicMock:
+    """
+    Mocks `asyncio.sleep` (as imported by scrape_do.async_client) across an
+    entire test function so retries don't introduce real delay.
+    """
+    return mocker.patch(
+        "scrape_do.async_client.asyncio.sleep",
+        new_callable=mocker.AsyncMock,
+        return_value=None,
+        )

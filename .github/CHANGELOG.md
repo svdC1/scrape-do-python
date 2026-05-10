@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `AsyncScrapeDoClient` backed by `httpx.AsyncClient`. Near-1:1 of the synchronous client (smart routing, retry strategy, session validation, event hooks), with every IO-bound method `async`/`await`. Sleeps between retries use `asyncio.sleep` rather than `time.sleep`.
+
+- `AsyncClientEventHooks` TypedDict and `AsyncSessionValidator` type alias. Both are async-only — hooks return `Awaitable[None]` and validators return `Awaitable[bool]`, so they can perform I/O while the request executes.
+
+- Public re-exports for `AsyncScrapeDoClient`, `AsyncClientEventHooks`, and `AsyncSessionValidator` in `scrape_do/__init__.py`.
+
 - `ScrapeDoResponse.json(raw_response=True, **kwargs) -> Any` convenience method. With `raw_response=True` (default) it shortcuts to `httpx_response.json()`; with `raw_response=False` it returns `json.loads(self.text, **kwargs)` so the post-envelope path is reachable without manual parsing.
 
 - Example block in the package-level docstring at [`src/scrape_do/__init__.py`](https://github.com/svdC1/scrape-do-python/blob/main/src/scrape_do/__init__.py) showcasing a typical request flow.
