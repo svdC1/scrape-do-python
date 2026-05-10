@@ -29,6 +29,7 @@ nav:
   - Contributing: contributing.md
   - API Reference:
       - Client: client.md
+      - Async Client: async_client.md
       - Models:
           - Enums: models/enums.md
           - Parameters: models/parameters.md

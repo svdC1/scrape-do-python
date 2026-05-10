@@ -39,6 +39,7 @@ def on_config(config: MkDocsConfig) -> MkDocsConfig:
         "httpx._types.TimeoutTypes": "/advanced/timeouts/",
         "httpx._types.RequestExtensions": "/advanced/extensions",
         "httpx.BaseTransport": "/advanced/transports/",
+        "httpx.AsyncBaseTransport": "/advanced/transports/",
         "httpx.Limits": "/advanced/resource-limits/",
         "httpx._client.UseClientDefault": "/api/#client",
         "httpx._config.DEFAULT_LIMITS": "/api/#client",
