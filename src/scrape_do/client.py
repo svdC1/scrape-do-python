@@ -795,6 +795,7 @@ class ScrapeDoClient:
             "POST",
             url,
             params=params,
+            session_validator=session_validator,
             headers=headers,
             body=body,
             payload_type=payload_type,

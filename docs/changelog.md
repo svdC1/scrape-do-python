@@ -16,6 +16,10 @@
 
 - Example block in the package-level docstring at [`src/scrape_do/__init__.py`](https://github.com/svdC1/scrape-do-python/blob/main/src/scrape_do/__init__.py) showcasing a typical request flow.
 
+### Fixed
+
+- [`ScrapeDoClient.post()`][scrape_do.client.ScrapeDoClient.post] now forwards the `session_validator` argument to [`request()`][scrape_do.client.ScrapeDoClient.request]. Previously the argument was accepted but silently ignored on POST calls. [`get()`][scrape_do.client.ScrapeDoClient.get] was unaffected.
+
 ## `0.1.1` — 2026-05-09
 
 ### Added
