@@ -315,6 +315,54 @@ class TestScrapeDoResponseValidation:
         assert response.target_status_code == 200
         assert response.scrape_do_status_code == 202
 
+    @staticmethod
+    def test_response_json_method(
+        make_response,
+        make_request,
+        mock_json_payload
+    ):
+        """
+        Ensures the `json` method returns the expected value depending
+        on the `raw_response` argument.
+        """
+
+        # Modify to include nested json payload
+        # shallow copy - pytest recalls the fixture for every function
+        json_payload = dict(mock_json_payload)
+
+        inner_payload = {"StatusCode": 200,
+                         "Message": "Target-Site-Message"
+                         }
+
+        json_payload['content'] = json.dumps(inner_payload)
+        req = make_request(render=True, return_json=True)
+        resp = make_response(status_code=200, json_data=json_payload)
+
+        scrape_resp = ScrapeDoResponse(req, resp)
+
+        assert scrape_resp.json(raw_response=True) == json_payload
+        assert scrape_resp.json(raw_response=False) == inner_payload
+
+    @staticmethod
+    def test_unsparsable_scrape_do_json_doesnt_raise(
+        make_request,
+        make_response
+    ):
+        """
+        Ensures that an invalid JSON response when return_json=True
+        doesn't raise an error.
+        """
+
+        req = make_request(render=True, return_json=True)
+        resp = make_response(
+            status_code=200,
+            json_data="unparsable_json_payload"
+            )
+
+        scrape_resp = ScrapeDoResponse(req, resp)
+
+        assert scrape_resp._parsed_json is None
+
 
 class TestScrapeDoResponseSerialization:
 

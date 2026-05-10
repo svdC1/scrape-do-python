@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import base64
+import json as json_m
 import re
 import httpx
 from functools import cached_property
@@ -771,6 +772,37 @@ class ScrapeDoResponse:
                 self._parsed_json["screenShots"]
                 ]
         return None
+
+    def json(
+        self,
+        raw_response: bool = True,
+        **kwargs: Any
+    ) -> Any:
+        """Decodes the JSON response body (if any) as a Python object.
+
+        When the `raw_response` parameter is set to `True`, this method acts
+        as a shortcut for `ScrapeDoResponse.httpx_response.json()`. When it is
+        set to `False`, it returns the result of passing the `text` attribute
+        to `json.loads`.
+
+        Args:
+            raw_response (bool): When set to `True`, the method returns
+                `self.httpx_response.json`. Otherwise, it returns
+                `json.loads(self.text)`
+            **kwargs (Any): Additional keyword arguments to pass to
+                `json.loads`
+
+        Raises:
+            json_m.JSONDecodeError: If the response contains unsparsable JSON.
+
+        Returns:
+            Dict, list, etc. Depending on what's in the response.
+        """
+
+        if raw_response:
+            return self.httpx_response.json(**kwargs)
+
+        return json_m.loads(self.text, **kwargs)
 
     def raise_for_status(self) -> Self:
         """Evaluates the response and raises a mapped exception if the request

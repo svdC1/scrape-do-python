@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 - Pre-1.0 minor versions may contain breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- `ScrapeDoResponse.json(raw_response=True, **kwargs) -> Any` convenience method. With `raw_response=True` (default) it shortcuts to `httpx_response.json()`; with `raw_response=False` it returns `json.loads(self.text, **kwargs)` so the post-envelope path is reachable without manual parsing.
+
+- Example block in the package-level docstring at [`src/scrape_do/__init__.py`](https://github.com/svdC1/scrape-do-python/blob/main/src/scrape_do/__init__.py) showcasing a typical request flow.
+
 ## [0.1.1] — 2026-05-09
 
 ### Added
