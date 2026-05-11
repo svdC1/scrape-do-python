@@ -94,3 +94,6 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "@(abc\\.)?abstractmethod",
 ]
+
+[tool.setuptools.package_data]
+"scrape_do.data" = ["*"]

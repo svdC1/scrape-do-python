@@ -1,5 +1,6 @@
 """
 Defines constants with valid parameter values expected by the Scrape.do API
+and runtime resources bundled with the package (e.g. Scrape.do's CA cert).
 
 Attributes:
     _SUPER_SUPPORTED_COUNTRIES (set[str]): The complete list of ISO 3166-1
@@ -20,9 +21,19 @@ Attributes:
 
     _ZIPCODE_NOT_ALLOWED_COUNTRIES (set[str]): Set of country codes for which
         the `postal_code` parameter is not allowed
+
+    SCRAPE_DO_CA_PATH (str): Filesystem path to Scrape.do's bundled CA
+        certificate, used by `DEFAULT_PROXY_SSL_CONTEXT` and exposed for
+        third-party tooling that needs to trust the same root.
+
+    DEFAULT_PROXY_SSL_CONTEXT (ssl.SSLContext): Default SSL context used by
+        the proxy-mode clients. Loads system CAs plus Scrape.do's bundled
+        CA so HTTPS targets validate through Scrape.do's MITM step.
 """
 
 import re
+import ssl
+from importlib.resources import files
 
 
 _SUPER_SUPPORTED_COUNTRIES = {
@@ -82,3 +93,64 @@ _ZIPCODE_ALLOWED_COUNTRIES = set(_ZIPCODE_FORMATS.keys())
 _ZIPCODE_NOT_ALLOWED_COUNTRIES = {c for c in _SUPER_SUPPORTED_COUNTRIES
                                   if c not in _ZIPCODE_ALLOWED_COUNTRIES
                                   }
+
+
+# --- Bundled runtime resources ---
+
+
+SCRAPE_DO_CA_PATH: str = str(files("scrape_do.data") / "scrapedo_ca.crt")
+"""Filesystem path to Scrape.do's bundled CA certificate.
+
+The cert is shipped under the `scrape_do.data` package so it travels with
+the wheel; resolved at import time via `importlib.resources.files()`.
+
+tip: Use Cases
+    - Default `verify` source for the proxy-mode clients (see
+      [`DEFAULT_PROXY_SSL_CONTEXT`][scrape_do.constants.DEFAULT_PROXY_SSL_CONTEXT]).
+
+    - Configuring third-party tooling (e.g. Selenium / Playwright) to
+      trust Scrape.do's MITM cert when using proxy mode.
+
+    - Mirroring the SDK's default proxy-mode TLS behavior in custom HTTP
+      clients.
+"""
+
+
+def _build_default_proxy_ssl_context() -> ssl.SSLContext:
+    """Builds the module-level `DEFAULT_PROXY_SSL_CONTEXT` singleton.
+
+    Returns:
+        An `ssl.SSLContext` configured with system CAs plus Scrape.do's
+            bundled CA loaded via `SCRAPE_DO_CA_PATH`.
+    """
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=SCRAPE_DO_CA_PATH)
+    return ctx
+
+
+DEFAULT_PROXY_SSL_CONTEXT: ssl.SSLContext = _build_default_proxy_ssl_context()
+"""SSL context loaded with system CAs plus Scrape.do's bundled CA.
+
+Used as the default `verify` value on
+[`ScrapeDoProxyClient`][scrape_do.proxy_client.ScrapeDoProxyClient] and
+[`AsyncScrapeDoProxyClient`][scrape_do.async_proxy_client.AsyncScrapeDoProxyClient]
+so HTTPS targets validate correctly through Scrape.do's MITM step without
+forcing users to disable TLS verification.
+
+tip: Overriding The Default
+    - `verify=True` &rarr; system CAs only (for users who've installed
+      Scrape.do's CA into their OS keychain).
+
+    - `verify=False` &rarr; disable TLS verification entirely (discouraged).
+
+    - `verify=<path>` or `verify=<ssl.SSLContext>` &rarr; custom certificate
+      bundle or context for mutual-TLS / corporate CAs.
+
+warning: Shared Instance
+    - This context is process-shared and treated as immutable
+
+    - Safe to assign as the default in client constructors
+
+    - Mutating it (loading additional locations, changing verify-mode, etc.)
+      affects every proxy client instance constructed afterwards.
+"""

@@ -578,3 +578,177 @@ class TestRequestParametersSerialization:
         expected_payload = {"url": example_url, "super": "true"}
         expected_payload.update(expected_dict)
         assert payload == expected_payload
+
+
+class TestProxyModeSerialization:
+
+    @staticmethod
+    def test_to_proxy_url_no_params(example_url):
+        """
+        Ensures that to_proxy_url with only the target URL produces an
+        empty password field (per Scrape.do's cURL example).
+        """
+        params = RequestParameters(url=example_url)
+        template = params.to_proxy_url()
+
+        assert template == "http://{api_token}:@proxy.scrape.do:8080"
+
+        finalized = template.format(api_token="MYTOKEN")
+        assert finalized == "http://MYTOKEN:@proxy.scrape.do:8080"
+
+    @staticmethod
+    def test_to_proxy_url_strips_target_url(example_url):
+        """
+        Ensures the target URL is not encoded into the password field —
+        only proxy-mode parameters belong there.
+        """
+        params = RequestParameters(url=example_url, super=True)
+        template = params.to_proxy_url()
+
+        assert example_url not in template
+        assert "url=" not in template
+        assert "super=true" in template
+
+    @staticmethod
+    def test_to_proxy_url_multiple_params(example_url):
+        """
+        Ensures multiple params are &-joined and URL-encoded as
+        documented (matches `render=false&super=true&geoCode=us` example).
+        """
+        params = RequestParameters(
+            url=example_url,
+            super=True,
+            geo_code="us",
+            render=False
+            )
+        template = params.to_proxy_url()
+        finalized = template.format(api_token="MYTOKEN")
+
+        # Order-independent membership checks (Pydantic dump order isn't
+        # contractually stable across model_dump implementations).
+        assert finalized.startswith("http://MYTOKEN:")
+        assert finalized.endswith("@proxy.scrape.do:8080")
+        assert "super=true" in finalized
+        assert "geoCode=us" in finalized
+        assert "render=false" in finalized
+
+    @staticmethod
+    def test_to_proxy_url_format_safe_with_browser_actions(example_url):
+        """
+        Regression: browser-action JSON payloads contain `{` and `}`
+        characters. urlencode must percent-encode them so the template's
+        .format() doesn't mistake them for additional placeholders.
+        """
+        params = RequestParameters(
+            url=example_url,
+            render=True,
+            play_with_browser=[ClickAction(selector="#submit")]
+            )
+        # render=True legitimately triggers the proxy-mode warning;
+        # acknowledge it so the test output stays clean.
+        with pytest.warns(UserWarning, match=r"render=false"):
+            template = params.to_proxy_url()
+
+        # The template should only have one {api_token} placeholder.
+        # Calling format(api_token=...) must not raise KeyError on a
+        # leaked {selector} or similar.
+        finalized = template.format(api_token="TOKEN")
+        assert "TOKEN" in finalized
+        # Encoded brace bodies survive
+        assert "%7B" in finalized or "%7b" in finalized  # `{`
+        assert "%7D" in finalized or "%7d" in finalized  # `}`
+
+    @staticmethod
+    def test_set_cookies_without_explicit_custom_headers_raises(
+        example_url
+    ):
+        """
+        Ensures the proxy-mode validator rejects `setCookies=True` when
+        `customHeaders` is left unset (proxy mode would auto-set it to
+        True, producing a conflicting header configuration).
+        """
+        params = RequestParameters(
+            url=example_url,
+            set_cookies="foo=bar"
+            )
+        with pytest.raises(
+            ValueError,
+            match=r"customHeaders=false"
+        ):
+            params.validate_proxy_params()
+
+    @staticmethod
+    def test_extra_headers_without_explicit_custom_headers_raises(
+        example_url
+    ):
+        """
+        Ensures `extraHeaders=True` requires explicit `customHeaders=false`
+        in proxy mode.
+        """
+        params = RequestParameters(
+            url=example_url,
+            extra_headers=True
+            )
+        with pytest.raises(
+            ValueError,
+            match=r"customHeaders=false"
+        ):
+            params.validate_proxy_params()
+
+    @staticmethod
+    def test_forward_headers_without_explicit_custom_headers_raises(
+        example_url
+    ):
+        """
+        Ensures `forwardHeaders=True` requires explicit `customHeaders=false`
+        in proxy mode.
+        """
+        params = RequestParameters(
+            url=example_url,
+            forward_headers=True
+            )
+        with pytest.raises(
+            ValueError,
+            match=r"customHeaders=false"
+        ):
+            params.validate_proxy_params()
+
+    @staticmethod
+    def test_explicit_custom_headers_false_passes(
+        example_url
+    ):
+        """
+        Ensures the validator accepts the canonical workaround — explicitly
+        setting `customHeaders=False` alongside the conflicting parameters.
+        """
+        params = RequestParameters(
+            url=example_url,
+            set_cookies="foo=bar",
+            custom_headers=False
+            )
+        # Should not raise
+        params.validate_proxy_params()
+
+    @staticmethod
+    def test_warns_on_render(example_url):
+        """
+        Ensures the validator emits a UserWarning when render=True is set,
+        per Scrape.do's recommendation against headless rendering via
+        proxy mode.
+        """
+        params = RequestParameters(url=example_url, render=True)
+        with pytest.warns(UserWarning, match=r"render=false"):
+            params.validate_proxy_params()
+
+    @staticmethod
+    def test_to_proxy_url_invokes_validate(example_url):
+        """
+        Ensures to_proxy_url runs validate_proxy_params — invalid configs
+        raise instead of producing a broken proxy URL.
+        """
+        params = RequestParameters(
+            url=example_url,
+            set_cookies="foo=bar"
+            )
+        with pytest.raises(ValueError):
+            params.to_proxy_url()

@@ -9,6 +9,7 @@ interactions
 from __future__ import annotations
 import json
 import urllib.parse
+import warnings
 from typing import (
     Optional,
     List,
@@ -838,3 +839,133 @@ class RequestParameters(BaseModel):
         flat_params.pop("token", None)
 
         return cls(**flat_params)
+
+    def validate_proxy_params(self) -> Self:
+        """
+        Cross-validates specific `Proxy Mode` parameter dependencies to
+        prevent invalid proxy configurations from being set.
+
+        tip: Intended Usage
+            Since `Scrape.do's Proxy Mode` has a few configuration quirks,
+            this method can be called on an already validated
+            `RequestParameters` instance to ensure that the current parameter
+            configuration is also valid when using it.
+
+        info: Proxy Mode Additional Validation
+            - `Proxy Mode` can be used with `customHeaders=false`, but unlike
+              when using the API, it automatically sets this parameter to
+              `true` if no value is provided. Therefore, setting either
+              `forwardHeaders=true`, or `extra_headers=true` without
+              explicitly setting `customHeaders=false` would result in a
+              configuration error where more than one header parameter is
+              provided.
+
+            - Additionally, the `customHeaders` parameter must be explicitly
+              set to `false` when `setCookies=true`.  Not doing so would
+              result in a configuration error where `customHeaders` and
+              `setCookies` are used simultaneously.
+
+            - Apart from these, all other parameter validations are
+              already ensured by the `validate_compatibility` model validator
+
+        warning: `render=True`
+            When using `Proxy Mode` with browser-automation tools, Scrape.do
+            does not recommend setting `render=true`, so in this case, this
+            method emits a `UserWarning`.
+
+        Raises:
+            ValueError: If any of the `Proxy Mode` additional constraints are
+                violated
+
+        Returns:
+            The validated instance from which the method was called
+        """
+
+        # Warn render=true
+        if self.render:
+            warnings.warn(
+                ("If you are using your own browser automation via Proxy Mode,"
+                 " Scrape.do does not recommend using Headless Browser "
+                 "features (it would be more accurate to set render=false)."
+                 ),
+                UserWarning
+                )
+
+        # customHeaders is explicitly set to False
+        if self.custom_headers is not None and not self.custom_headers:
+            return self
+
+        # From now on, customHeaders is either not set, or set to True
+        # So if either `if` statement evaluates to `True`, `customHeaders`
+        # must be `None`, or else validate_compatibility would have raised
+        if self.set_cookies:
+            raise ValueError(
+                ("The `setCookies` parameters can't be used "
+                 "simultaneously with any of the header parameters. The"
+                 " `customHeaders` parameters defaults to `True` in  "
+                 "`Proxy Mode`, so `customHeaders=false` must be explicitly "
+                 "set"
+                 )
+                )
+
+        if self.extra_headers or self.forward_headers:
+            raise ValueError((
+                "Proxy Mode uses `customHeaders=true` by default."
+                " Please set `customHeaders=false` explicitly to use other "
+                "header parameters"
+                ))
+
+        return self
+
+    def to_proxy_url(self) -> str:
+        """
+        Generates a `Scrape.do` Proxy connection string template.
+
+        abstract: Proxy Mode
+            Since `Scrape.do's Proxy Mode` accepts API parameters as the proxy
+            `password`, this method serializes the current configuration into
+            a valid connection string template that can later be formatted with
+            a valid API token.
+
+        tip: Intended Usage
+            - The `Proxy Clients` use this method to generate the proxy
+              connection URL
+
+            - It can also be used to construct `Proxy Mode` URLs for
+              browser automation libraries like `Playwright` or `Selenium`
+              while still benefiting from the strict validation provided by
+              the `RequestParameters` model.
+
+        tip: Formatting The Result
+            To turn the resulting template into a valid `Proxy Mode` URL, it
+            needs to be formatted with a `Scrape.do` API, for example
+            ```py
+            url = RequestParameters().to_proxy_url().format(api_token="TOKEN")
+            ```
+
+        warning: Proxy Mode Validation
+            This method calls `validate_proxy_params` to ensure
+            that a misconfigured `Proxy Mode` URL is not generated
+
+
+        Raises:
+            ValueError: If any of the `Proxy Mode` additional constraints are
+                violated
+
+        Returns:
+            A string template formatted as:
+                `http://{api_token}:<params>@proxy.scrape.do:8080`
+        """
+
+        # Validate parameters
+        self.validate_proxy_params()
+
+        # Serialize params reusing the API URL logic
+        api_params = self.to_api_params()
+
+        # Strip `url` from parameters
+        api_params.pop("url", None)
+
+        param_string = urllib.parse.urlencode(api_params)
+
+        return f"http://{{api_token}}:{param_string}@proxy.scrape.do:8080"

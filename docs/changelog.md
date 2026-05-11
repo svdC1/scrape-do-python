@@ -12,6 +12,14 @@
 
 ### Added
 
+- [`RequestParameters.to_proxy_url`][scrape_do.models.parameters.RequestParameters.to_proxy_url] — generates a `Scrape.do` Proxy-Mode connection string template (`http://{api_token}:<params>@proxy.scrape.do:8080`) for use with the upcoming proxy clients or with third-party tooling (Playwright / Selenium / curl).
+
+- [`RequestParameters.validate_proxy_params`][scrape_do.models.parameters.RequestParameters.validate_proxy_params] — cross-validates Proxy-Mode-specific parameter quirks (`customHeaders` defaulting to true server-side, `setCookies` interaction, render-mode discouragement).
+
+- [`SCRAPE_DO_CA_PATH`][scrape_do.constants.SCRAPE_DO_CA_PATH] and [`DEFAULT_PROXY_SSL_CONTEXT`][scrape_do.constants.DEFAULT_PROXY_SSL_CONTEXT] in `scrape_do.constants` — the bundled Scrape.do CA cert and an `ssl.SSLContext` preloaded with system CAs plus the bundled CA. Default `verify` source for the proxy-mode clients so HTTPS targets validate correctly through Scrape.do's MITM step.
+
+- Scrape.do's CA certificate bundled with the wheel under `scrape_do.data` so the SDK ships everything needed for proxy-mode TLS verification.
+
 - [`AsyncScrapeDoClient`][scrape_do.async_client.AsyncScrapeDoClient] backed by [`httpx.AsyncClient`][]. Near-1:1 of the synchronous client (smart routing, retry strategy, session validation, event hooks), with every IO-bound method `async`/`await`. Sleeps between retries use `asyncio.sleep` rather than `time.sleep`.
 
 - [`AsyncClientEventHooks`][scrape_do.async_client.AsyncClientEventHooks] TypedDict and [`AsyncSessionValidator`][scrape_do.async_client.AsyncSessionValidator] type alias. Both are async-only — hooks return `Awaitable[None]` and validators return `Awaitable[bool]`, so they can perform I/O while the request executes.
