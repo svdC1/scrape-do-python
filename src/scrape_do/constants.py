@@ -119,12 +119,29 @@ tip: Use Cases
 def _build_default_proxy_ssl_context() -> ssl.SSLContext:
     """Builds the module-level `DEFAULT_PROXY_SSL_CONTEXT` singleton.
 
+    warning: Strict X.509 Validation Relaxation
+        - `Scrape.do's` bundled CA is a self-signed root that omits the
+          `Authority Key Identifier` X.509 extension.
+
+        - RFC 5280 makes that extension *optional* for self-signed roots,
+          but OpenSSL's `VERIFY_X509_STRICT` flag rejects certs without it —
+          and Python 3.13's `ssl.create_default_context` enables that flag by
+          default.
+
+        - To allow chain validation against the bundled CA, this
+          context clears `VERIFY_X509_STRICT` while leaving every other
+          verification check (chain, hostname, expiry, signature, etc.)
+          intact.
+
     Returns:
         An `ssl.SSLContext` configured with system CAs plus Scrape.do's
-            bundled CA loaded via `SCRAPE_DO_CA_PATH`.
+            bundled CA loaded via `SCRAPE_DO_CA_PATH`, with
+            `VERIFY_X509_STRICT` cleared.
     """
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cafile=SCRAPE_DO_CA_PATH)
+    # Allow self-signed roots without an Authority Key Identifier extension.
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
     return ctx
 
 

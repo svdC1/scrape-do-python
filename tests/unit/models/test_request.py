@@ -242,3 +242,109 @@ class TestPreparedScrapeDoRequestSerialization:
         assert "json" not in httpx_kwargs
         assert "content" not in httpx_kwargs
         assert "data" not in httpx_kwargs
+
+    @staticmethod
+    def test_to_proxy_httpx_kwargs_target_url_and_no_api_token(example_url):
+        """
+        Ensures `to_proxy_httpx_kwargs` targets the destination URL
+        directly (not api.scrape.do) and omits both the API token and
+        Scrape.do API parameters from the httpx call — those live in
+        the proxy URL's userinfo segment.
+        """
+        params = RequestParameters(url=example_url, super=True, render=False)
+        req = PreparedScrapeDoRequest(method="GET", api_params=params)
+
+        httpx_kwargs = req.to_proxy_httpx_kwargs()
+
+        assert httpx_kwargs["method"] == "GET"
+        assert httpx_kwargs["url"] == example_url
+        assert "params" not in httpx_kwargs
+        assert "headers" not in httpx_kwargs
+        assert "json" not in httpx_kwargs
+        assert "data" not in httpx_kwargs
+        assert "content" not in httpx_kwargs
+
+    @staticmethod
+    def test_to_proxy_httpx_kwargs_custom_headers(example_url):
+        """
+        Ensures custom headers are forwarded to the httpx kwargs under
+        the `headers` key when present.
+        """
+        custom_headers = {"X-Test": "value", "Accept": "text/html"}
+        params = RequestParameters(
+            url=example_url,
+            custom_headers=True,
+            render=False
+            )
+        req = PreparedScrapeDoRequest(
+            method="GET",
+            headers=custom_headers,
+            api_params=params
+            )
+
+        httpx_kwargs = req.to_proxy_httpx_kwargs()
+
+        assert httpx_kwargs["headers"] == custom_headers
+
+    @staticmethod
+    def test_to_proxy_httpx_kwargs_json_body(example_url):
+        """
+        Ensures a dict body with `payload_type='json'` serializes
+        under the httpx `json` key.
+        """
+        body = {"key": "value", "n": 42}
+        params = RequestParameters(url=example_url, render=False)
+        req = PreparedScrapeDoRequest(
+            method="POST",
+            body=body,
+            payload_type="json",
+            api_params=params
+            )
+
+        httpx_kwargs = req.to_proxy_httpx_kwargs()
+
+        assert httpx_kwargs["json"] == body
+        assert "data" not in httpx_kwargs
+        assert "content" not in httpx_kwargs
+
+    @staticmethod
+    def test_to_proxy_httpx_kwargs_form_body(example_url):
+        """
+        Ensures a dict body with `payload_type='form'` serializes
+        under the httpx `data` key.
+        """
+        body = {"field": "value"}
+        params = RequestParameters(url=example_url, render=False)
+        req = PreparedScrapeDoRequest(
+            method="POST",
+            body=body,
+            payload_type="form",
+            api_params=params
+            )
+
+        httpx_kwargs = req.to_proxy_httpx_kwargs()
+
+        assert httpx_kwargs["data"] == body
+        assert "json" not in httpx_kwargs
+        assert "content" not in httpx_kwargs
+
+    @staticmethod
+    def test_to_proxy_httpx_kwargs_raw_body(example_url):
+        """
+        Ensures a raw (bytes/str) body with `payload_type='raw'`
+        serializes under the httpx `content` key.
+        """
+        body = b"raw=payload"
+        params = RequestParameters(url=example_url, render=False)
+        req = PreparedScrapeDoRequest(
+            method="POST",
+            body=body,
+            payload_type="raw",
+            api_params=params
+            )
+
+        httpx_kwargs = req.to_proxy_httpx_kwargs()
+
+        assert httpx_kwargs["content"] == body
+        assert "json" not in httpx_kwargs
+        assert "data" not in httpx_kwargs

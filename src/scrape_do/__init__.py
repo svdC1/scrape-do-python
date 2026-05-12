@@ -38,6 +38,7 @@ from scrape_do.async_client import (
     AsyncScrapeDoClient,
     AsyncSessionValidator,
 )
+from scrape_do.async_proxy_client import AsyncScrapeDoProxyClient
 from scrape_do.client import (
     ScrapeDoClient,
     SyncClientEventHooks,
@@ -58,11 +59,13 @@ from scrape_do.models import (
     RequestParameters,
     ScrapeDoResponse,
 )
+from scrape_do.proxy_client import ScrapeDoProxyClient
 
 __all__ = [
     "APIConnectionError",
     "AsyncClientEventHooks",
     "AsyncScrapeDoClient",
+    "AsyncScrapeDoProxyClient",
     "AsyncSessionValidator",
     "AuthenticationError",
     "AuthenticationThrottleError",
@@ -72,6 +75,7 @@ __all__ = [
     "RotatedSessionError",
     "ScrapeDoClient",
     "ScrapeDoError",
+    "ScrapeDoProxyClient",
     "ScrapeDoResponse",
     "ServerError",
     "SyncClientEventHooks",

@@ -10,6 +10,9 @@ from pathlib import Path
 from datetime import datetime
 from scrape_do.client import ScrapeDoClient
 from scrape_do.async_client import AsyncScrapeDoClient
+from scrape_do.proxy_client import ScrapeDoProxyClient
+from scrape_do.async_proxy_client import AsyncScrapeDoProxyClient
+from scrape_do.constants import DEFAULT_PROXY_SSL_CONTEXT
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -103,4 +106,55 @@ async def no_retry_async_client():
     Provides a live AsyncScrapeDoClient with retries disabled.
     """
     async with AsyncScrapeDoClient(max_retries=0) as client:
+        yield client
+
+
+@pytest.fixture
+def default_sync_proxy_client():
+    """
+    Provides a live ScrapeDoProxyClient configured with the bundled CA
+    SSL context. Same as the SDK's default — explicit here so the cert
+    use is visible in the test setup.
+    """
+    with ScrapeDoProxyClient(
+        verify=DEFAULT_PROXY_SSL_CONTEXT
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def no_retry_sync_proxy_client():
+    """
+    Provides a live ScrapeDoProxyClient with retries disabled and the
+    bundled CA SSL context.
+    """
+    with ScrapeDoProxyClient(
+        max_retries=0,
+        verify=DEFAULT_PROXY_SSL_CONTEXT
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def default_async_proxy_client():
+    """
+    Provides a live AsyncScrapeDoProxyClient configured with the bundled
+    CA SSL context.
+    """
+    async with AsyncScrapeDoProxyClient(
+        verify=DEFAULT_PROXY_SSL_CONTEXT
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def no_retry_async_proxy_client():
+    """
+    Provides a live AsyncScrapeDoProxyClient with retries disabled and
+    the bundled CA SSL context.
+    """
+    async with AsyncScrapeDoProxyClient(
+        max_retries=0,
+        verify=DEFAULT_PROXY_SSL_CONTEXT
+    ) as client:
         yield client

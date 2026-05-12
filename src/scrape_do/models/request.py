@@ -230,3 +230,48 @@ class PreparedScrapeDoRequest(BaseModel):
                 kwargs["content"] = self.body
 
         return kwargs
+
+    def to_proxy_httpx_kwargs(self) -> Dict[str, Any]:
+        """Packages the validated object into a dictionary ready for httpx
+        unpacking under `Scrape.do's Proxy Mode`.
+
+        info: Proxy Mode vs. API Mode
+            Unlike
+            [`to_httpx_kwargs`][scrape_do.models.request.PreparedScrapeDoRequest.to_httpx_kwargs],
+            this method:
+
+            - Targets the destination URL directly (the httpx client is
+              expected to be configured with the Scrape.do proxy at
+              construction time).
+
+            - Does **not** include the API token (it lives in the proxy
+              URL's user field).
+
+            - Does **not** include API parameters in the query string
+              (they live in the proxy URL's password field, serialized
+              by
+              [`RequestParameters.to_proxy_url`][scrape_do.models.parameters.RequestParameters.to_proxy_url]).
+
+        Returns:
+            Keyword arguments strictly formatted for `httpx.request()`
+                when the underlying client routes through `Scrape.do's
+                Proxy Mode`.
+        """
+
+        kwargs: Dict[str, Any] = {
+            "method": self.method,
+            "url": str(self.api_params.url),
+        }
+
+        if self.headers:
+            kwargs["headers"] = self.headers
+
+        if self.body is not None:
+            if self.payload_type == "json":
+                kwargs["json"] = self.body
+            elif self.payload_type == "form":
+                kwargs['data'] = self.body
+            else:
+                kwargs["content"] = self.body
+
+        return kwargs

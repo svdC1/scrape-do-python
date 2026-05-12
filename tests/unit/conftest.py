@@ -12,6 +12,12 @@ from scrape_do.client import (
 from scrape_do.async_client import (
     AsyncScrapeDoClient
     )
+from scrape_do.proxy_client import (
+    ScrapeDoProxyClient
+    )
+from scrape_do.async_proxy_client import (
+    AsyncScrapeDoProxyClient
+    )
 
 
 @pytest.fixture
@@ -139,6 +145,34 @@ def mock_sync_client():
     Yields a cleanly initialized ScrapeDoClient for testing.
     """
     with ScrapeDoClient(api_token='dummy_token') as client:
+        yield client
+
+
+@pytest.fixture
+def mock_sync_proxy_client():
+    """
+    Yields a cleanly initialized ScrapeDoProxyClient for testing.
+
+    `verify=False` disables TLS verification so respx-mocked transports
+    don't need to surface Scrape.do's CA chain.
+    """
+    with ScrapeDoProxyClient(
+        api_token='dummy_token',
+        verify=False,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def mock_async_proxy_client():
+    """
+    Yields a cleanly initialized AsyncScrapeDoProxyClient for async
+    testing.
+    """
+    async with AsyncScrapeDoProxyClient(
+        api_token='dummy_token',
+        verify=False,
+    ) as client:
         yield client
 
 

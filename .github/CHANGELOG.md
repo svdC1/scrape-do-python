@@ -10,13 +10,21 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- `RequestParameters.to_proxy_url()` — generates a `Scrape.do` Proxy-Mode connection string template (`http://{api_token}:<params>@proxy.scrape.do:8080`) for use with the upcoming proxy clients or with third-party tooling (Playwright / Selenium / curl).
+- `ScrapeDoProxyClient` and `AsyncScrapeDoProxyClient` — route requests through Scrape.do's Proxy Mode (`proxy.scrape.do:8080`). Same request/response surface as the API-mode clients (`execute` / `request` / `get` / `post`), minus `execute_from_url` (no equivalent in proxy mode). The async variant is backed by `httpx.AsyncClient` and uses `asyncio.sleep` for retry pauses.
+
+- Per-(`api_token`, parameters) `httpx.Client` / `httpx.AsyncClient` pool with bounded LRU eviction (`max_pooled_clients=16` default, configurable). Cookies partition naturally per pooled client, replacing the per-request cookie clear used in API mode and giving session-scoped requests a stable underlying connection.
+
+- `PreparedScrapeDoRequest.to_proxy_httpx_kwargs()` — serializes the same data model into httpx kwargs that target the destination URL directly (the API token and Scrape.do parameters live in the proxy URL's userinfo segment, not the request).
+
+- `RequestParameters.to_proxy_url()` — generates a `Scrape.do` Proxy-Mode connection string template (`http://{api_token}:<params>@proxy.scrape.do:8080`) for use with the proxy clients or with third-party tooling (Playwright / Selenium / curl).
 
 - `RequestParameters.validate_proxy_params()` — cross-validates Proxy-Mode-specific parameter quirks (`customHeaders` defaulting to true server-side, `setCookies` interaction, render-mode discouragement).
 
-- `SCRAPE_DO_CA_PATH` and `DEFAULT_PROXY_SSL_CONTEXT` in `scrape_do.constants` — the bundled Scrape.do CA cert and an `ssl.SSLContext` preloaded with system CAs plus the bundled CA. Default `verify` source for the proxy-mode clients so HTTPS targets validate correctly through Scrape.do's MITM step.
+- `SCRAPE_DO_CA_PATH` and `DEFAULT_PROXY_SSL_CONTEXT` in `scrape_do.constants` — the bundled Scrape.do CA cert and an `ssl.SSLContext` preloaded with system CAs plus the bundled CA. Default `verify` source for the proxy-mode clients so HTTPS targets validate correctly through Scrape.do's MITM step without disabling TLS verification. `VERIFY_X509_STRICT` is cleared so chain validation accepts Scrape.do's self-signed root (which omits the optional AKI extension); all other verification checks remain intact.
 
 - Scrape.do's CA certificate bundled with the wheel under `scrape_do.data` so the SDK ships everything needed for proxy-mode TLS verification.
+
+- Public re-exports for `ScrapeDoProxyClient` and `AsyncScrapeDoProxyClient` in `scrape_do/__init__.py`.
 
 - `AsyncScrapeDoClient` backed by `httpx.AsyncClient`. Near-1:1 of the synchronous client (smart routing, retry strategy, session validation, event hooks), with every IO-bound method `async`/`await`. Sleeps between retries use `asyncio.sleep` rather than `time.sleep`.
 
