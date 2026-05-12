@@ -65,6 +65,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 scrape_do = ["py.typed"]
+"scrape_do.data" = ["*"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -94,6 +95,3 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "@(abc\\.)?abstractmethod",
 ]
-
-[tool.setuptools.package_data]
-"scrape_do.data" = ["*"]
