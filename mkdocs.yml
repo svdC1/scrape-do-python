@@ -30,6 +30,8 @@ nav:
   - API Reference:
       - Client: client.md
       - Async Client: async_client.md
+      - Proxy Client: proxy_client.md
+      - Async Proxy Client: async_proxy_client.md
       - Models:
           - Enums: models/enums.md
           - Parameters: models/parameters.md

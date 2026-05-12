@@ -701,7 +701,7 @@ class ScrapeDoClient:
 
         Inherits the smart routing logic, parameter validation, and execution
         constraints of the base
-        [request][scrape_do.client.ScrapeDoClient.request] method.
+        [`request`][scrape_do.client.ScrapeDoClient.request] method.
 
         Args:
             url (str): The target website URL (or raw Scrape.do URL).
@@ -758,7 +758,7 @@ class ScrapeDoClient:
 
         Inherits the smart routing logic, parameter validation, and execution
         constraints of the base
-        [request][scrape_do.client.ScrapeDoClient.request] method.
+        [`request`][scrape_do.client.ScrapeDoClient.request] method.
 
         Args:
             url (str): The target website URL (or raw Scrape.do URL).

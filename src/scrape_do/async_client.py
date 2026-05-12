@@ -713,7 +713,7 @@ class AsyncScrapeDoClient:
 
         Inherits the smart routing logic, parameter validation, and
         execution constraints of the base
-        [request][scrape_do.async_client.AsyncScrapeDoClient.request] method.
+        [`request`][scrape_do.async_client.AsyncScrapeDoClient.request] method.
 
         Args:
             url (str): The target website URL (or raw Scrape.do URL).
@@ -770,7 +770,7 @@ class AsyncScrapeDoClient:
 
         Inherits the smart routing logic, parameter validation, and
         execution constraints of the base
-        [request][scrape_do.async_client.AsyncScrapeDoClient.request] method.
+        [`request`][scrape_do.async_client.AsyncScrapeDoClient.request] method.
 
         Args:
             url (str): The target website URL (or raw Scrape.do URL).

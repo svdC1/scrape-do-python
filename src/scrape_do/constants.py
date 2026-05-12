@@ -170,4 +170,18 @@ warning: Shared Instance
 
     - Mutating it (loading additional locations, changing verify-mode, etc.)
       affects every proxy client instance constructed afterwards.
+
+warning: Strict X.509 Validation Relaxation
+    - `Scrape.do's` bundled CA is a self-signed root that omits the
+      `Authority Key Identifier` X.509 extension.
+
+    - RFC 5280 makes that extension *optional* for self-signed roots,
+      but OpenSSL's `VERIFY_X509_STRICT` flag rejects certs without it —
+      and Python 3.13's `ssl.create_default_context` enables that flag by
+      default.
+
+    - To allow chain validation against the bundled CA, this
+      context clears `VERIFY_X509_STRICT` while leaving every other
+      verification check (chain, hostname, expiry, signature, etc.)
+      intact.
 """

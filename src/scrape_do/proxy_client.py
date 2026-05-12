@@ -247,15 +247,19 @@ class ScrapeDoProxyClient:
         """Returns a pooled `httpx.Client` for the given proxy URL.
 
         info: Pool Behavior
-            - **Cache hit**: bumps the entry to the back of the LRU
-              ordering (most recently used) and returns the existing
-              client.
+            **Cache hit**
 
-            - **Cache miss + pool full**: evicts the least-recently-used
-              entry, closes it, then constructs a new client.
+            - Bumps the entry to the back of the LRU ordering (most recently
+              used) and returns the existing client.
 
-            - **Cache miss + pool has room**: constructs a new client
-              and stores it.
+            **Cache miss + pool full**
+
+            - evicts the least-recently-used entry, closes it, then constructs
+              a new client.
+
+            **Cache miss + pool has room**
+
+            - constructs a new client and stores it.
 
         Args:
             proxy_url (str): The formatted proxy URL (with `api_token`
@@ -316,6 +320,13 @@ class ScrapeDoProxyClient:
     ) -> Literal[False]:
         """Closes every pooled `httpx.Client` without swallowing
         exceptions.
+
+        Args:
+            exc_type (Optional[type[BaseException]]): The type of the
+                exception.
+            exc_val (Optional[BaseException]): The instance of the exception.
+            exc_tb (Optional[TracebackType]): The traceback information.
+
 
         Returns:
             `False`, since no exceptions are swallowed.
@@ -620,7 +631,8 @@ class ScrapeDoProxyClient:
 
         Inherits the smart routing logic, parameter validation, and execution
         constraints of the base
-        [`request`][scrape_do.client.ScrapeDoProxyClient.request] method.
+        [`request`][scrape_do.proxy_client.ScrapeDoProxyClient.request]
+        method.
 
         Args:
             url (str): The target website URL.
@@ -677,7 +689,7 @@ class ScrapeDoProxyClient:
 
         Inherits the smart routing logic, parameter validation, and execution
         constraints of the base
-        [`request`][scrape_do.client.ScrapeDoProxyClient.request] method.
+        [`request`][scrape_do.proxy_client.ScrapeDoProxyClient.request] method.
 
         Args:
             url (str): The target website URL.

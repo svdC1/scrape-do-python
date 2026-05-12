@@ -236,9 +236,9 @@ class PreparedScrapeDoRequest(BaseModel):
         unpacking under `Scrape.do's Proxy Mode`.
 
         info: Proxy Mode vs. API Mode
-            Unlike
-            [`to_httpx_kwargs`][scrape_do.models.request.PreparedScrapeDoRequest.to_httpx_kwargs],
-            this method:
+            This method differs from
+             [`to_httpx_kwargs`][scrape_do.models.request.PreparedScrapeDoRequest.to_httpx_kwargs]
+            in the following ways.
 
             - Targets the destination URL directly (the httpx client is
               expected to be configured with the Scrape.do proxy at

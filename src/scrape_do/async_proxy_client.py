@@ -254,27 +254,26 @@ class AsyncScrapeDoProxyClient:
         """Returns a pooled `httpx.AsyncClient` for the given proxy URL.
 
         info: Pool Behavior
-            - **Fast path (cache hit)**
+            **Fast path (cache hit)**
 
-              - dict lookup + `move_to_end` don't await, so no other coroutine
-                can preempt. The lock is skipped.
+            - dict lookup + `move_to_end` don't await, so no other coroutine
+              can preempt. The lock is skipped.
 
-              - `move_to_end` bumps the entry to the back of the LRU ordering
-                before returning.
+            - `move_to_end` bumps the entry to the back of the LRU ordering
+                    before returning.
 
-            - **Slow path (cache miss)**
+            **Slow path (cache miss)**
 
-              - Acquires `self._pool_lock` and re-checks the pool
-                (double-checked locking).
+            - Acquires `self._pool_lock` and re-checks the pool
+              (double-checked locking).
 
-              - A concurrent coroutine that won the lock first may have
-                populated the entry while we were waiting. If so, return that
-                client.
+            - A concurrent coroutine that won the lock first may have
+              populated the entry while we were waiting. If so, return that
+              client.
 
-              - Otherwise evict (if full) and construct a new one.
+            - Otherwise evict (if full) and construct a new one.
 
         warning: Why The Lock Matters
-
             - Two coroutines racing on a cache miss for the same URL
               would each construct a fresh `httpx.AsyncClient`.
 
@@ -352,6 +351,13 @@ class AsyncScrapeDoProxyClient:
     ) -> Literal[False]:
         """Closes every pooled `httpx.AsyncClient` without swallowing
         exceptions.
+
+        Args:
+            exc_type (Optional[type[BaseException]]): The type of the
+                exception.
+            exc_val (Optional[BaseException]): The instance of the exception.
+            exc_tb (Optional[TracebackType]): The traceback information.
+
 
         Returns:
             `False`, since no exceptions are swallowed.
