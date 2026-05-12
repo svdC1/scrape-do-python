@@ -889,3 +889,32 @@ class TestAsyncProxyClientRequestOverrides:
 
         spy.assert_called_once()
         assert spy.call_args.kwargs.get("extensions") == extensions
+
+    @respx.mock
+    async def test_cookies_are_cleared_after_execution(
+        self,
+        mock_async_proxy_client: AsyncScrapeDoProxyClient,
+        make_request,
+        mock_env_vars,
+        mock_async_sleep
+    ):
+        """
+        Ensures the pooled client's cookie jar is emptied after every
+        request. Scrape.do owns the cookie lifecycle via setCookies /
+        scrape.do-cookies / sessionId — anything httpx accumulates
+        locally would silently bypass that contract on a follow-up
+        request through the same pooled client.
+        """
+        req = make_request()
+
+        respx.get("https://example.com").respond(
+            status_code=200,
+            headers={"Set-Cookie": "target_tracking=xyz; Path=/"}
+        )
+
+        await mock_async_proxy_client.execute(req)
+
+        pooled_client = next(
+            iter(mock_async_proxy_client._client_pool.values())
+            )
+        assert len(pooled_client.cookies) == 0

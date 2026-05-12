@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 
 - `ScrapeDoProxyClient` and `AsyncScrapeDoProxyClient` — route requests through Scrape.do's Proxy Mode (`proxy.scrape.do:8080`). Same request/response surface as the API-mode clients (`execute` / `request` / `get` / `post`), minus `execute_from_url` (no equivalent in proxy mode). The async variant is backed by `httpx.AsyncClient` and uses `asyncio.sleep` for retry pauses.
 
-- Per-(`api_token`, parameters) `httpx.Client` / `httpx.AsyncClient` pool with bounded LRU eviction (`max_pooled_clients=16` default, configurable). Cookies partition naturally per pooled client, replacing the per-request cookie clear used in API mode and giving session-scoped requests a stable underlying connection.
+- Per-(`api_token`, parameters) `httpx.Client` / `httpx.AsyncClient` pool with bounded LRU eviction (`max_pooled_clients=16` default, configurable). Two requests with the same parameters reuse the same TCP / TLS / HTTP-2 connection; the cookie jar on each pooled client is cleared after every request (Scrape.do owns the cookie lifecycle via `setCookies` / `scrape.do-cookies` / `sessionId`, so pooling is purely a transport concern).
 
 - `PreparedScrapeDoRequest.to_proxy_httpx_kwargs()` — serializes the same data model into httpx kwargs that target the destination URL directly (the API token and Scrape.do parameters live in the proxy URL's userinfo segment, not the request).
 

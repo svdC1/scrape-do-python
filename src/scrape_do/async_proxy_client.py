@@ -161,12 +161,20 @@ class AsyncScrapeDoProxyClient:
         - Each unique formatted proxy URL gets its own `httpx.AsyncClient`
 
         - Two requests with the same `RequestParameters` reuse the same
-          pooled client (and its cookie jar)
+          pooled client (and therefore the same TCP / TLS / HTTP-2
+          state) for transport-level efficiency.
 
         - Two requests with different parameters get different clients
 
         - When `max_pooled_clients` is exceeded, the least-recently-used
           client is closed.
+
+        - Cookies are **not** preserved across requests on the pooled
+          client - the jar is cleared after every call. Scrape.do owns
+          the cookie lifecycle through `setCookies` (in),
+          `scrape.do-cookies` / `pureCookies=true` (out), and
+          `sessionId` (server-side session jars). Pooling is purely a
+          transport concern.
 
     Args:
         api_token (Optional[str]): The Scrape.do API key. If omitted, the
@@ -456,90 +464,106 @@ class AsyncScrapeDoProxyClient:
         if extensions is not None:
             httpx_kwargs["extensions"] = extensions
 
-        for attempt in range(self.max_retries + 1):
-            try:
-                raw_resp = await client.request(**httpx_kwargs)
-                scrape_response = ScrapeDoResponse(request, raw_resp)
+        try:
+            for attempt in range(self.max_retries + 1):
+                try:
+                    raw_resp = await client.request(**httpx_kwargs)
+                    scrape_response = ScrapeDoResponse(request, raw_resp)
 
-                # Strictly aligned with Scrape.do documented gateway errors
-                is_retryable_status = (
-                    raw_resp.status_code in (429, 502, 510)
-                    )
+                    # Strictly aligned with Scrape.do documented gateway
+                    # errors
+                    is_retryable_status = (
+                        raw_resp.status_code in (429, 502, 510)
+                        )
 
-                if scrape_response.is_proxy_error and is_retryable_status:
-                    if attempt < self.max_retries:
+                    if (
+                        scrape_response.is_proxy_error
+                        and is_retryable_status
+                    ):
+                        if attempt < self.max_retries:
 
-                        # Fire retry hook and pass response
-                        if "retry" in self.event_hooks:
-                            for retry_hook in self.event_hooks["retry"]:
-                                await retry_hook(
-                                    attempt,
-                                    request,
-                                    scrape_response,
-                                    None
+                            # Fire retry hook and pass response
+                            if "retry" in self.event_hooks:
+                                for retry_hook in self.event_hooks["retry"]:
+                                    await retry_hook(
+                                        attempt,
+                                        request,
+                                        scrape_response,
+                                        None
+                                        )
+
+                            if callable(self.retry_backoff):
+                                await asyncio.sleep(
+                                    self.retry_backoff(attempt)
                                     )
+                            else:
+                                await asyncio.sleep(
+                                    float(self.retry_backoff)
+                                    )
+                            continue
 
-                        if callable(self.retry_backoff):
-                            await asyncio.sleep(
-                                self.retry_backoff(attempt)
+                        # If attempt == max_retries, fall through to
+                        # return the failed ScrapeDoResponse to the user.
+
+                    # Call validator if session_id is not None
+                    if (
+                        session_validator is not None
+                        and session_id is not None
+                    ):
+                        if await session_validator(scrape_response):
+                            raise RotatedSessionError(
+                                (
+                                    f"User-Defined Session Validator "
+                                    f"Failed | "
+                                    f"Status: {raw_resp.status_code}"
+                                    ),
+                                raw_resp,
+                                request,
+                                scrape_response
                                 )
-                        else:
-                            await asyncio.sleep(float(self.retry_backoff))
-                        continue
 
-                    # If attempt == max_retries, fall through
-                    # to return the failed ScrapeDoResponse to the user.
+                    # Fires on a success, OR on a final 502 if retries
+                    # are exhausted.
+                    if "response" in self.event_hooks:
+                        for resp_hook in self.event_hooks["response"]:
+                            await resp_hook(scrape_response)
 
-                # Call validator if session_id is not None
-                if (
-                    session_validator is not None
-                    and session_id is not None
-                ):
-                    if await session_validator(scrape_response):
-                        raise RotatedSessionError(
-                            (
-                                f"User-Defined Session Validator Failed | "
-                                f"Status: {raw_resp.status_code}"
-                                ),
-                            raw_resp,
-                            request,
-                            scrape_response
-                            )
+                    return scrape_response
 
-                # Fires on a success, OR on a final 502 if retries are
-                # exhausted.
-                if "response" in self.event_hooks:
-                    for resp_hook in self.event_hooks["response"]:
-                        await resp_hook(scrape_response)
+                except RequestError as e:
+                    if attempt == self.max_retries:
+                        raise APIConnectionError(
+                            f"Network transport failed: {str(e)}",
+                            request
+                            ) from e
 
-                return scrape_response
+                    # Fire retry hook and pass the exception
+                    if "retry" in self.event_hooks:
+                        for retry_hook in self.event_hooks["retry"]:
+                            await retry_hook(
+                                attempt,
+                                request,
+                                None,
+                                e
+                                )
 
-            except RequestError as e:
-                if attempt == self.max_retries:
-                    raise APIConnectionError(
-                        f"Network transport failed: {str(e)}",
-                        request
-                        ) from e
+                    if callable(self.retry_backoff):
+                        await asyncio.sleep(self.retry_backoff(attempt))
+                    else:
+                        await asyncio.sleep(float(self.retry_backoff))
 
-                # Fire retry hook and pass the exception
-                if "retry" in self.event_hooks:
-                    for retry_hook in self.event_hooks["retry"]:
-                        await retry_hook(
-                            attempt,
-                            request,
-                            None,
-                            e
-                            )
-
-                if callable(self.retry_backoff):
-                    await asyncio.sleep(self.retry_backoff(attempt))
-                else:
-                    await asyncio.sleep(float(self.retry_backoff))
-
-        # max_retries < 0
-        raise RuntimeError(
-            "Execution loop exhausted without returning a response."
-            )
+            # max_retries < 0
+            raise RuntimeError(
+                "Execution loop exhausted without returning a response."
+                )
+        finally:
+            # Prevent cookie bleed between requests on the pooled
+            # client. Scrape.do owns the cookie lifecycle (setCookies in,
+            # scrape.do-cookies / pureCookies out, sessionId for server-
+            # side session jars), so any cookies httpx accumulates here
+            # would silently bypass the user's parameter contract on the
+            # next request through the same pooled client.
+            client.cookies.clear()
 
     async def request(
         self,
