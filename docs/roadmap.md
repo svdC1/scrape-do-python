@@ -6,7 +6,7 @@
 
 ## 0.2 — Async + Proxy Mode
 
-!!! abstract "Status &rarr; `Planned`"
+!!! success "Status &rarr; [`Shipped`](https://github.com/svdC1/scrape-do-python/releases/tag/v0.2.0)"
 
 - Next Minor
 
@@ -58,7 +58,9 @@
 
 ## 1.0 — Surface Freeze
 
-???+ success "Stability Commitment"
+!!! abstract "Status &rarr; `Planned`"
+
+???+ note "Stability Commitment"
     - Stabilize the public API across `sync`, `async`, `proxy`, `async-API`, and `plugin` namespaces
     
     - Post-1.0, breaking changes follow strict [`Semantic Versioning`](https://semver.org/)
@@ -109,12 +111,12 @@ src/scrape_do/
    │  ├─ async_client.py
    │  └─ models/ # (15)!
    │
-   └─ amazon/        
+   └─ amazon/ # (16)!
       │    
       ├─ __init__.py 
       ├─ client.py
       ├─ async_client.py
-      └─ models/ # (16)!
+      └─ models/ # (17)!
 ```
 
 1. Curated Public Re-Exports
@@ -132,7 +134,8 @@ src/scrape_do/
 13. `0.4` + `0.5` - Each plugin is a sub-package
 14. `0.4`
 15. Search-Specific
-16. Product/Listing-Specific
+16. `0.5`
+17. Product/Listing-Specific
     
 ---
 

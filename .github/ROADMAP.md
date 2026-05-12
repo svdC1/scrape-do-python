@@ -42,8 +42,8 @@ Items may be reordered or rescoped based on user feedback and design discoveries
 
 ## Planned Package Layout
 
-> View [`Documentation Site Roadmap`](svdc1.github.io/scrape-do-python/roadmap/)
+> View [`Documentation Site Roadmap`](https://svdc1.github.io/scrape-do-python/roadmap/)
 
 ## Suggestions Are Welcome
 
-> If a feature you need isn't here, open a [`Feature   Request`](https://github.com/svdC1/scrape-do-python/issues/new?template=feature_request.md)
+> If a feature you need isn't here, open a [`Feature Request`](https://github.com/svdC1/scrape-do-python/issues/new?template=feature_request.md)

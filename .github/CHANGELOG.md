@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - Pre-1.0 minor versions may contain breaking changes.
 
-## [Unreleased]
+## [0.2.0] — 2026-05-12
 
 ### Added
 
@@ -39,6 +39,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - `ScrapeDoClient.post()` now forwards the `session_validator` argument to `request()`. Previously the argument was accepted but silently ignored on POST calls. `get()` was unaffected.
+
+[`0.2.0`](https://github.com/svdC1/scrape-do-python/releases/tag/v0.2.0)
 
 ## [0.1.1] — 2026-05-09
 

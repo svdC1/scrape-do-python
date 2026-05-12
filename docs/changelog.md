@@ -8,7 +8,7 @@
 
 ---
 
-## `Unreleased`
+## `0.2.0` — 2026-05-12
 
 ### Added
 
@@ -41,6 +41,8 @@
 ### Fixed
 
 - [`ScrapeDoClient.post()`][scrape_do.client.ScrapeDoClient.post] now forwards the `session_validator` argument to [`request()`][scrape_do.client.ScrapeDoClient.request]. Previously the argument was accepted but silently ignored on POST calls. [`get()`][scrape_do.client.ScrapeDoClient.get] was unaffected.
+
+[`0.2.0`](https://github.com/svdC1/scrape-do-python/releases/tag/v0.2.0)
 
 ## `0.1.1` — 2026-05-09
 
