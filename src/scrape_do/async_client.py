@@ -40,15 +40,13 @@ from typing import (
     Dict,
     List,
     Optional,
-    Self,
     Any,
     Union,
-    Unpack,
     Callable,
     Literal,
-    TypeAlias,
     TypedDict
     )
+from typing_extensions import Self, TypeAlias, Unpack
 from types import TracebackType
 from .client import default_backoff_strategy
 from .models import (

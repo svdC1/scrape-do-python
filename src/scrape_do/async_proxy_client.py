@@ -41,13 +41,12 @@ from httpx._client import (
 from typing import (
     Dict,
     Optional,
-    Self,
     Any,
     Union,
-    Unpack,
     Callable,
     Literal,
     )
+from typing_extensions import Self, Unpack
 from types import TracebackType
 from .client import default_backoff_strategy
 from .async_client import (

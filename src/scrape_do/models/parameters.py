@@ -13,12 +13,12 @@ import warnings
 from typing import (
     Optional,
     List,
-    Self,
     Type,
     Any,
     Dict,
     TypedDict
     )
+from typing_extensions import Self
 from pydantic import (
     BaseModel,
     Field,

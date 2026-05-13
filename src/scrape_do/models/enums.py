@@ -6,10 +6,8 @@ strict autocomplete and validation for expected parameter values
 """
 
 from __future__ import annotations
-from typing import (
-    TypeAlias,
-    Literal
-    )
+from typing import Literal
+from typing_extensions import TypeAlias
 
 RegionCodeType: TypeAlias = Literal[
     'europe',

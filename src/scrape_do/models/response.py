@@ -19,10 +19,10 @@ from typing import (
     Optional,
     Union,
     List,
-    Self,
     Any,
     Dict
     )
+from typing_extensions import Self
 from pydantic import (
     BaseModel,
     Field,

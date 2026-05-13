@@ -32,15 +32,13 @@ from typing import (
     Dict,
     List,
     Optional,
-    Self,
     Any,
     Union,
-    Unpack,
     Callable,
     Literal,
-    TypeAlias,
     TypedDict
     )
+from typing_extensions import Self, TypeAlias, Unpack
 from types import TracebackType
 from .models import (
     RequestParameters,
