@@ -29,6 +29,10 @@ Attributes:
     DEFAULT_PROXY_SSL_CONTEXT (ssl.SSLContext): Default SSL context used by
         the proxy-mode clients. Loads system CAs plus Scrape.do's bundled
         CA so HTTPS targets validate through Scrape.do's MITM step.
+
+    _EXPECTED_ERROR_KEYS (set[str]): Defines the list of keys expected to
+        exist in the JSON body of an error response returned by the Scrape.do
+        API.
 """
 
 import re
@@ -103,10 +107,6 @@ _EXPECTED_ERROR_KEYS = {
             "ErrorCode",
             "Contact"
             }
-"""
-Defines the list of keys expected to exist in the JSON body of an error
-response returned by the Scrape.do API.
-"""
 
 # --- Bundled runtime resources ---
 
@@ -154,7 +154,11 @@ def _build_default_proxy_ssl_context() -> ssl.SSLContext:
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cafile=SCRAPE_DO_CA_PATH)
     # Allow self-signed roots without an Authority Key Identifier extension.
-    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    # create_default_context() enables VERIFY_X509_STRICT by default starting
+    # in Python 3.13. The flag itself has existed for years; guard with
+    # hasattr just in case the OpenSSL backend doesn't expose it.
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
     return ctx
 
 

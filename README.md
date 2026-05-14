@@ -12,13 +12,7 @@ A Python SDK for the [`Scrape.do`](https://scrape.do) web-scraping proxy API.
 Built on [`httpx`](https://github.com/encode/httpx) and [`pydantic v2`](https://github.com/pydantic/pydantic), with strict request validation, automatic retries on gateway errors, sticky-session validation, and SDK-native lifecycle hooks.
 
 ## Status
-> `v0.1.0` &rarr; Early but functional
-
-> Synchronous client is shipped
-
-> Async and Proxy-Mode clients are on the [`Roadmap`](.github/ROADMAP.md)
-
-> Breaking changes are possible between `0.x` minor versions.
+> Check the [`Changelog`](.github/CHANGELOG.md) for the latest changes and project status
 
 ## Installation
 

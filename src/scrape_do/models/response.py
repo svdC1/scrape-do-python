@@ -27,7 +27,6 @@ from typing_extensions import Self
 from pydantic import (
     BaseModel,
     Field,
-    HttpUrl,
     ConfigDict
     )
 from .request import PreparedScrapeDoRequest
@@ -56,7 +55,10 @@ class ScrapeDoNetworkRequest(BaseModel):
     `networkRequests` field when `returnJSON=true`
 
     Attributes:
-        url (HttpUrl): The absolute URL of the requested resource.
+        url (str): The absolute URL of the requested resource, as reported
+            by Scrape.do. Stored as a plain string (not `HttpUrl`) because
+            real-world pages produce technically-valid-but-quirky URLs
+            that pydantic-core's URL parser rejects.
         method (str): The HTTP method used (e.g., GET, POST).
         status (int): The HTTP status code returned by the resource server.
         request_headers (Dict[str, str]): The headers sent by the headless
@@ -69,7 +71,7 @@ class ScrapeDoNetworkRequest(BaseModel):
             resource server.
     """
     model_config = ConfigDict(populate_by_name=True)
-    url: HttpUrl
+    url: str
     method: str
     status: int
     request_headers: Dict[str, str] = Field(default_factory=dict)
@@ -219,11 +221,14 @@ class ScrapeDoFrame(BaseModel):
     webpage.
 
     Attributes:
-        url (HttpUrl): The absolute source URL of the iframe.
+        url (str): The absolute source URL of the iframe, as reported by
+            Scrape.do. Stored as a plain string (not `HttpUrl`) because
+            real-world pages embed iframes with technically-valid-but-quirky
+            URLs that pydantic-core's URL parser rejects.
         content (Optional[str]): The rendered HTML content inside the iframe.
     """
     model_config = ConfigDict(populate_by_name=True)
-    url: HttpUrl
+    url: str
     content: Optional[str] = None
 
 
@@ -829,27 +834,36 @@ class ScrapeDoResponse:
 
         When the `raw_response` parameter is set to `True`, this method acts
         as a shortcut for `ScrapeDoResponse.httpx_response.json()`. When it is
-        set to `False`, it returns the result of passing the `text` attribute
-        to `json.loads`.
+        set to `False` and the response contains a Scrape.do JSON envelope,
+        it passes the `content` key of that envelope to `json.loads`.
 
         Args:
             raw_response (bool): When set to `True`, the method returns
-                `self.httpx_response.json`. Otherwise, it returns
-                `json.loads(self.text)`
-            **kwargs (Any): Additional keyword arguments to pass to
+                `self.httpx_response.json`. Otherwise, it tries to pass
+                the `content` key of the Scrape.do JSON envelope to
                 `json.loads`
+            **kwargs (Any): Additional keyword arguments to pass to
+                `json.loads` or `httpx.Response.json()`
 
         Raises:
-            json_m.JSONDecodeError: If the response contains unsparsable JSON.
+            json_m.JSONDecodeError: If the response contains unparsable JSON.
 
         Returns:
             Dict, list, etc. Depending on what's in the response.
         """
-
-        if raw_response:
+        # If raw_response is explicitly requested or there's no parsed
+        # Scrape.do JSON envelope
+        if raw_response or not self._parsed_json:
             return self.httpx_response.json(**kwargs)
 
-        return json_m.loads(self.text, **kwargs)
+        # Extract inner content payload
+        inner_content = self._parsed_json.get("content")
+
+        # Fall back to httpx response json if there's no content
+        if inner_content is None:
+            return self.httpx_response.json(**kwargs)
+
+        return json_m.loads(inner_content, **kwargs)
 
     def raise_for_status(self) -> Self:
         """Evaluates the response and raises a mapped exception if the request

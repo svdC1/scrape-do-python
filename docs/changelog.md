@@ -18,6 +18,8 @@
 
 - [`ScrapeDoResponse.to_dict`][scrape_do.models.response.ScrapeDoResponse.to_dict] and [`to_json`][scrape_do.models.response.ScrapeDoResponse.to_json] — flat dict / pretty-printed JSON of every public field. Excludes the wrapped [`httpx.Response`][] and originating [`PreparedScrapeDoRequest`][scrape_do.models.request.PreparedScrapeDoRequest] (recoverable via `httpx_response` / `request` attributes). Nested pydantic sub-models (`frames`, `network_requests`, `websocket_requests`, `action_results`, `screenshots`) are recursively serialized via `model_dump()`; empty lists render as `None`. `to_json` defaults to `indent=2, ensure_ascii=False`, overridable.
 
+- `hasattr` guard for `ssl.VERIFY_X509_STRICT` just in case the OpenSSL backend doesn't expose it.
+
 ### Changed
 
 - [`APIResponseError`][scrape_do.exceptions.APIResponseError] now uses [`ScrapeDoJSONErrorMessage.try_from_response`][scrape_do.exceptions.ScrapeDoJSONErrorMessage.try_from_response] for error-body extraction. The previous key-list parsing (`detail`, `Error`, `errorMessage`, `message`, `Message`) is replaced with the Scrape.do schema. The "Unknown API Error" fallback now reports status + body on separate lines.
@@ -25,6 +27,16 @@
 - `requires-python = ">=3.9"` compatibility actually works: every source file that imported `Self` / `Unpack` / `TypeAlias` from `typing` (which are `3.11+` / `3.10+`) was migrated to [`typing_extensions`](https://typing-extensions.readthedocs.io/). Previously the package raised `ImportError` at import time on `3.9` / `3.10`.
 
 - `Attributes:` block removed from the [`ScrapeDoResponse`][scrape_do.models.response.ScrapeDoResponse] class docstring — Google-style places property documentation on each property's own docstring.
+
+- [`ScrapeDoResponse.json(raw_response=False)`][scrape_do.models.response.ScrapeDoResponse.json] now extracts and parses the `content` key from the Scrape.do JSON envelope when present, falling back to `httpx.Response.json()` otherwise. The previous implementation always called `json.loads(self.text)`, which failed when `text` was HTML (e.g., `return_json=False`).
+
+- README + docs landing page replaced the hardcoded `v0.1.0 — Early but functional` status callout with a [`Changelog`](changelog.md) pointer so the status doesn't go stale every release.
+
+- `mkdocs.yml` now includes the [`typing-extensions`](https://typing-extensions.readthedocs.io/) inventory so docs cross-references to `Self` / `TypeAlias` / `Unpack` resolve.
+
+### Fixed
+
+- [`ScrapeDoFrame.url`][scrape_do.models.response.ScrapeDoFrame] and [`ScrapeDoNetworkRequest.url`][scrape_do.models.response.ScrapeDoNetworkRequest] relaxed from [`HttpUrl`][pydantic.HttpUrl] to `str`. These fields report URLs that Scrape.do observed on the rendered target page; real-world iframes / network calls produce technically-valid-but-quirky URLs (e.g., embeds with `?feature=oembed?wmode=transparent`) that pydantic-core's URL parser rejected, blowing up the whole response parse. The outbound [`RequestParameters.url`][scrape_do.models.parameters.RequestParameters] keeps `HttpUrl` since validation there is load-bearing.
 
 ### Dependencies
 

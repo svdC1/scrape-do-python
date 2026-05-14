@@ -6,7 +6,9 @@ from scrape_do.models import (
     PreparedScrapeDoRequest,
     RequestParameters,
     ScrapeDoResponse,
-    ScrapeDoScreenshot
+    ScrapeDoScreenshot,
+    ScrapeDoFrame,
+    ScrapeDoNetworkRequest
     )
 
 pytestmark = pytest.mark.unit
@@ -649,3 +651,53 @@ class TestScrapeDoResponseReprAndSerialization:
 
         # indent=None produces no newlines, single-line output.
         assert "\n" not in rendered
+
+
+class TestObservationalURLFields:
+    """
+    Regression tests for the observational URL fields on
+    `ScrapeDoFrame` and `ScrapeDoNetworkRequest`. These fields used to
+    be typed as `pydantic.HttpUrl`, which rejected real-world iframe
+    and network-request URLs reported by Scrape.do (e.g., embeds with
+    `?a=1?b=2`). Both fields are now plain `str` since the SDK does
+    not act on them beyond returning them to the user.
+    """
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # vanilla case, trailing slash
+            "https://example.com/",
+            # double `?` - the breaking pattern from the wild
+            "https://example.com/embed/abc?feature=oembed?wmode=transparent",
+            # double `?` + later `&` (mixed separators)
+            "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
+            # single `?`, single query param
+            "https://example.com/embed/ghi?wmode=transparent",
+            # proper `&`-separated multi-param (sanity)
+            "https://example.com/embed/jkl?a=1&b=2",
+            ]
+        )
+    @staticmethod
+    def test_frame_accepts_quirky_urls(url):
+        """`ScrapeDoFrame.url` accepts any string verbatim."""
+        frame = ScrapeDoFrame(url=url)
+        assert frame.url == url
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com/",
+            "https://example.com/embed/abc?feature=oembed?wmode=transparent",
+            "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
+            "https://example.com/embed/ghi?wmode=transparent",
+            "https://example.com/embed/jkl?a=1&b=2",
+            ]
+        )
+    @staticmethod
+    def test_network_request_accepts_quirky_urls(url):
+        """`ScrapeDoNetworkRequest.url` accepts any string verbatim."""
+        net_req = ScrapeDoNetworkRequest(
+            url=url, method="GET", status=200
+            )
+        assert net_req.url == url
