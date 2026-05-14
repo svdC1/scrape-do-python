@@ -19,6 +19,7 @@ from typing import (
     Optional,
     Union,
     List,
+    Sequence,
     Any,
     Dict
     )
@@ -37,7 +38,8 @@ from ..exceptions import (
     ServerError,
     AuthenticationError,
     AuthenticationThrottleError,
-    RateLimitError
+    RateLimitError,
+    ScrapeDoJSONErrorMessage
     )
 
 # -------------------------
@@ -255,49 +257,6 @@ class ScrapeDoResponse:
         - `pure_cookies=True` : Tells Scrpe.do to return the original
           `Set-Cookie` headers it got from the target website instead of
           bundling them into its `scrape.do-cookies` response header
-
-    Attributes:
-        request (PreparedScrapeDoRequest): The original, validated request
-            configuration.
-        httpx_response (httpx.Response): The unmutated network response object.
-        target_status_code (Optional[int]): The status code returned by the
-            destination server.
-        text (str): The primary payload of the target website
-            (HTML or inner JSON string).
-        target_headers (httpx.Headers): The target's headers, without
-            proxy telemetry headers.
-        cookies (Optional[httpx.Cookies]): Extracted cookies returned by the
-            target.
-        resolved_url (Optional[str]): The final destination URL after all
-            redirects.
-        target_url (Optional[str]): The original destination URL requested.
-        scrape_do_status_code (Optional[int]): The status code of the
-            Scrape.do gateway.
-        request_cost (Optional[float]): API billing credits consumed by this
-            specific execution.
-        remaining_credits (Optional[float]): Total API billing credits
-            remaining on your account.
-        rid (Optional[str]): The specific proxy node Routing ID utilized
-        rate (Optional[str]): Current rate limit metrics for the provided API
-            token.
-        request_id (Optional[str]): Unique UUID assigned to this request by
-            the gateway.
-        auth (Optional[int]): Authentication status against the
-            Scrape.do gateway.
-        initial_status_code (Optional[int]): Target's status extracted
-            strictly from proxy headers.
-        scrape_do_headers (httpx.Headers): Filtered headers containing only
-             Scrape.do telemetry.
-        frames (Optional[List[ScrapeDoFrame]]): Isolated cross-origin iframes
-            discovered on the page.
-        network_requests (Optional[List[ScrapeDoNetworkRequest]]): Background
-            HTTP calls made by the browser.
-        websocket_requests (Optional[List[ScrapeDoWebsocketRequest]]):
-            Intercepted bidirectional WebSocket traffic.
-        action_results (Optional[List[ScrapeDoActionResult]]): Execution
-            outcomes of programmatic DOM actions.
-        screenshots (Optional[List[ScrapeDoScreenshot]]): Captured Base64
-            screenshots.
     """
     def __init__(
         self,
@@ -327,6 +286,98 @@ class ScrapeDoResponse:
                 # `is_proxy_error` heuristic can properly route it as a
                 # ServerError later.
                 pass
+
+    def __repr__(self) -> str:
+        """Compact identifier for REPL inspection and log output.
+
+        warning: Not Reconstructable
+            `ScrapeDoResponse` wraps an `httpx.Response` and a
+            `PreparedScrapeDoRequest` from a network exchange that
+            can't be replayed, so a strict `eval`-able repr isn't
+            realistic. Python's docs explicitly endorse the
+            angle-bracket shorthand for that case.
+
+        Returns:
+            A short one-line string of the form
+                `<ScrapeDoResponse [Status: ..., Proxy Error: ...]>`.
+        """
+        return (
+            f"<ScrapeDoResponse [Status: {self.scrape_do_status_code}, "
+            f"Proxy Error: {self.is_proxy_error}]>"
+            )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Flat dict of every public field on this response.
+
+        warning: Excluded Fields
+            - The underlying `httpx.Response` (not JSON-serializable
+              and recoverable via `self.httpx_response`).
+
+            - The originating `PreparedScrapeDoRequest` (recoverable
+              via `self.request`).
+
+        info: Nested Model Serialization
+            - Lists of pydantic sub-models (`frames`, `network_requests`,
+              `websocket_requests`, `action_results`, `screenshots`)
+              are serialized via each item's `.model_dump()`.
+
+            - Empty lists are rendered as `None` so absent sections aren't
+              confused with empty ones.
+
+        Returns:
+            Dict mapping every public property name to its current
+                value.
+        """
+        def _dump_list(
+            items: Optional[Sequence[BaseModel]]
+        ) -> Optional[List[Dict[str, Any]]]:
+            if not items:
+                return None
+            return [item.model_dump() for item in items]
+
+        cookies = self.cookies
+        return {
+            "target_status_code": self.target_status_code,
+            "text": self.text,
+            "target_headers": dict(self.target_headers),
+            "cookies": dict(cookies) if cookies is not None else None,
+            "resolved_url": self.resolved_url,
+            "target_url": self.target_url,
+            "scrape_do_status_code": self.scrape_do_status_code,
+            "request_cost": self.request_cost,
+            "remaining_credits": self.remaining_credits,
+            "rid": self.rid,
+            "rate": self.rate,
+            "request_id": self.request_id,
+            "auth": self.auth,
+            "initial_status_code": self.initial_status_code,
+            "scrape_do_headers": (
+                dict(self.scrape_do_headers)
+                if self.scrape_do_headers is not None
+                else None
+                ),
+            "is_proxy_error": self.is_proxy_error,
+            "frames": _dump_list(self.frames),
+            "network_requests": _dump_list(self.network_requests),
+            "websocket_requests": _dump_list(self.websocket_requests),
+            "action_results": _dump_list(self.action_results),
+            "screenshots": _dump_list(self.screenshots),
+            }
+
+    def to_json(self, **kwargs: Any) -> str:
+        """JSON string of `to_dict()`.
+
+        Args:
+            **kwargs: Forwarded verbatim to `json.dumps`. Defaults:
+                `indent=2`, `ensure_ascii=False`. Override either by
+                passing them explicitly.
+
+        Returns:
+            Pretty-printed JSON string.
+        """
+        kwargs.setdefault("indent", 2)
+        kwargs.setdefault("ensure_ascii", False)
+        return json_m.dumps(self.to_dict(), default=str, **kwargs)
 
     @cached_property
     def is_proxy_error(self) -> bool:
@@ -384,15 +435,11 @@ class ScrapeDoResponse:
             pass
 
         if isinstance(parsed_json, dict):
-            error_keys = [
-                "message",
-                "Error",
-                "detail",
-                "Message",
-                "errorMessage"
-                ]
 
-            if any(k in parsed_json for k in error_keys):
+            # Check for Expected Error Keys
+            if ScrapeDoJSONErrorMessage.try_from_response(
+                self._raw_response
+            ) is not None:
                 return True
 
             status_code_match = (
@@ -839,31 +886,13 @@ class ScrapeDoResponse:
         if self.target_status_code and self.target_status_code < 400:
             return self
 
-        # Checks if it's an Authentication Throttle Error
-        error_msg = None
-        if self._parsed_json:
-            error_keys = [
-                "message",
-                "Error",
-                "detail",
-                "Message",
-                "errorMessage"
-                ]
-
-            for k in error_keys:
-                if k in self._parsed_json:
-                    error_msg = self._parsed_json[k]
-                    break
-
-        elif self.text:
-            error_msg = self.text
-
-        is_throttled = None
-        throttled_msg = "temporarily throttled by the authentication server"
-        if error_msg and throttled_msg in error_msg:
-            is_throttled = True
-
         raw_status = self._raw_response.status_code
+
+        # Try to determine if it's an authentication throttle
+        error_info = ScrapeDoJSONErrorMessage.try_from_response(
+            self._raw_response
+            )
+        is_throttled = bool(error_info and error_info.is_auth_throttle)
 
         # Route to Proxy Infrastructure Errors
         if self.is_proxy_error:

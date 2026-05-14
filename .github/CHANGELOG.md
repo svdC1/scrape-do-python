@@ -6,6 +6,28 @@ All notable changes to this project will be documented in this file.
 
 - Pre-1.0 minor versions may contain breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- `ScrapeDoJSONErrorMessage` — pydantic model for the structured JSON error envelope returned by Scrape.do. Exposes `status_code`, `messages`, `url`, `possible_causes`, `error_type`, `error_code`, `contact` mapped from the API's uppercase keys (`StatusCode`, `Message`, `URL`, `PossibleCauses`, `ErrorType`, `ErrorCode`, `Contact`). The `try_from_response` classmethod returns an instance on a recognizable error response, `None` otherwise — never raises. `is_auth_throttle` property detects the auth-throttle case. Public re-export from `scrape_do`.
+
+- `ScrapeDoResponse.__repr__` — angle-bracket shorthand (`<ScrapeDoResponse [Status: ..., Proxy Error: ...]>`) for REPL inspection and log output. `__str__` falls back to `__repr__`.
+
+- `ScrapeDoResponse.to_dict()` and `to_json(**kwargs)` — flat dict / pretty-printed JSON of every public field. Excludes the wrapped `httpx.Response` and originating `PreparedScrapeDoRequest` (recoverable via `httpx_response` / `request` attributes). Nested pydantic sub-models (`frames`, `network_requests`, `websocket_requests`, `action_results`, `screenshots`) are recursively serialized via `model_dump()`; empty lists render as `None`. `to_json` defaults to `indent=2, ensure_ascii=False`, overridable.
+
+### Changed
+
+- `APIResponseError` now uses `ScrapeDoJSONErrorMessage.try_from_response` for error-body extraction. The previous key-list parsing (`detail`, `Error`, `errorMessage`, `message`, `Message`) is replaced with the Scrape.do schema. The "Unknown API Error" fallback now reports status + body on separate lines.
+
+- `requires-python = ">=3.9"` compatibility actually works: every source file that imported `Self` / `Unpack` / `TypeAlias` from `typing` (which are 3.11+ / 3.10+) was migrated to `typing_extensions`. Previously the package raised `ImportError` at import time on 3.9 / 3.10.
+
+- `Attributes:` block removed from the `ScrapeDoResponse` class docstring — Google-style places property documentation on each property's own docstring.
+
+### Dependencies
+
+- Added `typing_extensions>=4.0` as a direct runtime dependency.
+
 ## [0.2.0] — 2026-05-12
 
 ### Added

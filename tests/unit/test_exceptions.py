@@ -8,7 +8,8 @@ from scrape_do.exceptions import (
     RateLimitError,
     ServerError,
     BadRequestError,
-    RotatedSessionError
+    RotatedSessionError,
+    ScrapeDoJSONErrorMessage
 )
 
 pytestmark = pytest.mark.unit
@@ -17,27 +18,50 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize(
-    "json_data, text_data, expected_message",
+    "json_data, text_data, expected_substrings",
     [
-        ({"errorMessage": "Node failed"}, None, "Node failed"),
-        ({"detail": "Missing param"}, None, "Missing param"),
-        ({"Message": "Capitalized"}, None, "Capitalized"),
+        # Full Scrape.do error envelope: each labeled field surfaces.
+        (
+            {
+                "StatusCode": 500,
+                "Message": ["Node failed"],
+                "URL": "https://example.com",
+                "PossibleCauses": ["Network glitch"],
+                "ErrorType": "ProxyFailure",
+                "ErrorCode": 42,
+                "Contact": "support@scrape.do",
+                },
+            None,
+            ["Node failed", "ProxyFailure", "42", "support@scrape.do"]
+            ),
+        # Partial envelope: only Message + ErrorCode set, others default.
+        (
+            {"Message": ["Missing param"], "ErrorCode": 7},
+            None,
+            ["Missing param", "Error Code : 7"]
+            ),
+        # Non-error JSON body: falls back to "Unknown API Error" multi-line.
         (
             None,
             "<html>Nginx 502 Bad Gateway</html>",
-            "Unknown API Error. Body: <html>Nginx 502 Bad Gateway</html>"
-            )
+            [
+                "Unknown API Error",
+                "Status: 500",
+                "<html>Nginx 502 Bad Gateway</html>",
+                ]
+            ),
         ]
     )
 def test_api_response_error_parsing(
     make_request,
     make_response,
     json_data, text_data,
-    expected_message
+    expected_substrings
 ):
     """
-    Ensures the exception dynamically extracts Scrape.do's varying error keys,
-    or falls back to text.
+    Ensures the exception extracts the Scrape.do error envelope when the
+    body matches the canonical schema, and falls back to a multi-line
+    "Unknown API Error" message otherwise.
     """
     req = make_request()
     resp = make_response(500, json_data=json_data, text=text_data)
@@ -48,7 +72,8 @@ def test_api_response_error_parsing(
         request=req,
         response=scrape_resp
         )
-    assert expected_message in err.message
+    for substring in expected_substrings:
+        assert substring in err.message
 
 
 @pytest.mark.parametrize(
@@ -127,13 +152,15 @@ def test_raise_for_status_auth_throttle_trap(make_request, make_response):
     subclass.
     """
     req = make_request()
-    # Missing headers + 401 + specific text = Throttle Error
+    # Missing headers + 401 + canonical Scrape.do envelope with the
+    # throttle phrase in `Message` -> Throttle Error
     resp = make_response(
         401,
         json_data={
-            "message": ("You are temporarily throttled by the authentication"
-                        " server."
-                        )
+            "Message": [
+                "You are temporarily throttled by the authentication"
+                " server."
+                ]
             }
         )
     scrape_resp = ScrapeDoResponse(req, resp)
@@ -162,3 +189,150 @@ def test_rotated_session_error_init(make_request, make_response):
     assert err.raw_response is resp
     assert err.request is req
     assert err.response is scrape_do_resp
+
+
+# --- Testing ScrapeDoJSONErrorMessage ---
+
+
+class TestScrapeDoJSONErrorMessage:
+
+    def test_try_from_response_full_envelope(self, make_response):
+        """Full Scrape.do error envelope parses every field through
+        camelCase aliases into snake_case attributes."""
+        resp = make_response(
+            500,
+            json_data={
+                "StatusCode": 502,
+                "Message": ["Upstream failed", "Retry later"],
+                "URL": "https://example.com",
+                "PossibleCauses": ["Network glitch"],
+                "ErrorType": "ProxyFailure",
+                "ErrorCode": 42,
+                "Contact": "support@scrape.do",
+                }
+            )
+
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+
+        assert err is not None
+        assert err.status_code == 502
+        assert err.messages == ["Upstream failed", "Retry later"]
+        assert err.url == "https://example.com"
+        assert err.possible_causes == ["Network glitch"]
+        assert err.error_type == "ProxyFailure"
+        assert err.error_code == 42
+        assert err.contact == "support@scrape.do"
+
+    def test_try_from_response_partial_envelope(self, make_response):
+        """Only Message + ErrorCode set; defaults fill the rest."""
+        resp = make_response(
+            500, json_data={"Message": ["solo"], "ErrorCode": 7}
+            )
+
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+
+        assert err is not None
+        assert err.messages == ["solo"]
+        assert err.error_code == 7
+        assert err.status_code is None
+        assert err.url is None
+        assert err.possible_causes == []
+        assert err.error_type is None
+        assert err.contact is None
+
+    def test_try_from_response_ignores_extra_fields(self, make_response):
+        """`extra="ignore"` lets new Scrape.do fields pass through
+        without raising ValidationError."""
+        resp = make_response(
+            500,
+            json_data={
+                "Message": ["text"],
+                "BrandNewServerField": "ignored",
+                }
+            )
+
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+        assert err is not None
+        assert err.messages == ["text"]
+
+    def test_try_from_response_returns_none_on_non_json(self, make_response):
+        """Non-JSON body -> None (never raises)."""
+        resp = make_response(500, text="<html>plain HTML</html>")
+        assert ScrapeDoJSONErrorMessage.try_from_response(resp) is None
+
+    def test_try_from_response_returns_none_on_non_dict(self, make_response):
+        """JSON list body -> None."""
+        resp = make_response(500, json_data=["a", "b"])
+        assert ScrapeDoJSONErrorMessage.try_from_response(resp) is None
+
+    def test_try_from_response_returns_none_on_only_statuscode(
+        self, make_response
+    ):
+        """`StatusCode` alone isn't a reliable error signal - returnJSON
+        success bodies have it too. Require at least one error-specific
+        key."""
+        resp = make_response(200, json_data={"StatusCode": 200})
+        assert ScrapeDoJSONErrorMessage.try_from_response(resp) is None
+
+    def test_try_from_response_returns_none_on_validation_error(
+        self, make_response
+    ):
+        """Schema mismatch (Message must be list, got int) -> None
+        rather than ValidationError bubbling out."""
+        resp = make_response(500, json_data={"Message": 42})
+        assert ScrapeDoJSONErrorMessage.try_from_response(resp) is None
+
+    def test_str_includes_all_labels(self, make_response):
+        """str() includes every field label and value."""
+        resp = make_response(
+            500,
+            json_data={
+                "StatusCode": 502,
+                "Message": ["err"],
+                "URL": "https://example.com",
+                "PossibleCauses": ["bad"],
+                "ErrorType": "T1",
+                "ErrorCode": 99,
+                "Contact": "support@scrape.do",
+                }
+            )
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+        rendered = str(err)
+
+        assert "Status Code : 502" in rendered
+        assert "Messages : err" in rendered
+        assert "URL : https://example.com" in rendered
+        assert "Possible Causes: bad" in rendered
+        assert "Error Type : T1" in rendered
+        assert "Error Code : 99" in rendered
+        assert "Contact : support@scrape.do" in rendered
+
+    def test_is_auth_throttle_positive(self, make_response):
+        """Throttle phrase in messages -> True."""
+        resp = make_response(
+            401,
+            json_data={
+                "Message": [
+                    "Hey, you are temporarily throttled by the "
+                    "authentication server, slow down."
+                    ]
+                }
+            )
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+        assert err is not None
+        assert err.is_auth_throttle is True
+
+    def test_is_auth_throttle_negative(self, make_response):
+        """Different message -> False."""
+        resp = make_response(401, json_data={"Message": ["Bad token"]})
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+        assert err is not None
+        assert err.is_auth_throttle is False
+
+    def test_is_auth_throttle_empty_messages(self, make_response):
+        """No messages -> False (no crash on empty list)."""
+        resp = make_response(401, json_data={"ErrorCode": 1})
+        err = ScrapeDoJSONErrorMessage.try_from_response(resp)
+        assert err is not None
+        assert err.messages == []
+        assert err.is_auth_throttle is False

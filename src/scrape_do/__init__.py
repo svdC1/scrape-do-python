@@ -52,6 +52,7 @@ from scrape_do.exceptions import (
     RateLimitError,
     RotatedSessionError,
     ScrapeDoError,
+    ScrapeDoJSONErrorMessage,
     ServerError,
     TargetError,
 )
@@ -75,6 +76,7 @@ __all__ = [
     "RotatedSessionError",
     "ScrapeDoClient",
     "ScrapeDoError",
+    "ScrapeDoJSONErrorMessage",
     "ScrapeDoProxyClient",
     "ScrapeDoResponse",
     "ServerError",

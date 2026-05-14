@@ -94,6 +94,19 @@ _ZIPCODE_NOT_ALLOWED_COUNTRIES = {c for c in _SUPER_SUPPORTED_COUNTRIES
                                   if c not in _ZIPCODE_ALLOWED_COUNTRIES
                                   }
 
+_EXPECTED_ERROR_KEYS = {
+            "StatusCode",
+            "Message",
+            "URL",
+            "PossibleCauses",
+            "ErrorType",
+            "ErrorCode",
+            "Contact"
+            }
+"""
+Defines the list of keys expected to exist in the JSON body of an error
+response returned by the Scrape.do API.
+"""
 
 # --- Bundled runtime resources ---
 

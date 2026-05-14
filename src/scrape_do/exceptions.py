@@ -7,10 +7,121 @@ strategies.
 
 from __future__ import annotations
 import httpx
-from typing import Optional, TYPE_CHECKING
-
+from typing import List, Optional, TYPE_CHECKING
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from .constants import _EXPECTED_ERROR_KEYS
 if TYPE_CHECKING:
     from .models import PreparedScrapeDoRequest, ScrapeDoResponse
+
+
+class ScrapeDoJSONErrorMessage(BaseModel):
+    """Structured representation of a Scrape.do JSON error envelope.
+
+    abstract: API Response Errors
+        For `APIResponseErrors`, `Scrape.do` returns a JSON body containing
+        information about what went wrong. This model unifies access to those
+        responses and drives exception routing.
+
+    warning: Not Official
+        - The schema was reconstructed from manual testing against the
+          `Scrape.do API`
+
+        - New keys are silently ignored (`extra="ignore"`) so server-side
+          additions don't break parsing
+
+        - Missing keys fall back to their defaults.
+    """
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    status_code: Optional[int] = Field(default=None, alias="StatusCode")
+    messages: List[str] = Field(default_factory=list, alias="Message")
+    url: Optional[str] = Field(default=None, alias="URL")
+    possible_causes: List[str] = Field(
+        default_factory=list, alias="PossibleCauses"
+        )
+    error_type: Optional[str] = Field(default=None, alias="ErrorType")
+    error_code: Optional[int] = Field(default=None, alias="ErrorCode")
+    contact: Optional[str] = Field(default=None, alias="Contact")
+
+    @classmethod
+    def try_from_response(
+        cls,
+        raw_resp: httpx.Response,
+    ) -> Optional[ScrapeDoJSONErrorMessage]:
+        """Parse a Scrape.do error envelope, or return None if the
+        response doesn't look like one.
+
+        Args:
+            raw_resp (httpx.Response): The raw `httpx.Response` object.
+
+        Returns:
+            A `ScrapeDoJSONErrorMessage` when the response body parses
+                as a JSON dict containing at least one Scrape.do error key
+                and pydantic validation succeeds. `None` otherwise. Never
+                raises.
+        """
+        try:
+            data = raw_resp.json()
+        except ValueError:
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        # StatusCode appears in success bodies too (e.g. returnJSON=true),
+        # so it's not a reliable error signal. Require at least one of
+        # the error-specific keys.
+        keys = _EXPECTED_ERROR_KEYS - {"StatusCode"}
+        if not any(k in data for k in keys):
+            return None
+
+        try:
+            return cls.model_validate(data)
+        except ValidationError:
+            return None
+
+    def __str__(self) -> str:
+        """Generates a human-readable rendering for inclusion in
+        exception messages.
+
+        Returns:
+            A multi-line string with all fields labeled.
+        """
+        status = f"Status Code : {self.status_code}"
+        url = f"URL : {self.url or 'None'}"
+
+        if self.possible_causes:
+            causes = f"Possible Causes: {'|'.join(self.possible_causes)}"
+        else:
+            causes = "Possible Causes: None"
+
+        if self.messages:
+            msg = f"Messages : {'|'.join(self.messages)}"
+        else:
+            msg = "Messages : Unknown API Error"
+
+        _type = f"Error Type : {self.error_type or 'None'}"
+        code = f"Error Code : {self.error_code or 'None'}"
+        contact = f"Contact : {self.contact or 'None'}"
+
+        return (
+            f"API Response Error\n{status}\n{msg}\n{url}\n{causes}\n{_type}"
+            f"\n{code}\n{contact}"
+            )
+
+    @property
+    def is_auth_throttle(self) -> bool:
+        """Whether the envelope's messages match Scrape.do's
+        authentication-throttle phrase.
+
+        Returns:
+            `True` if any of `messages` contains the throttle substring,
+                `False` otherwise.
+        """
+        throttle_msg = "temporarily throttled by the authentication server"
+        if not self.messages:
+            return False
+        return throttle_msg in ";".join(self.messages)
 
 
 class ScrapeDoError(Exception):
@@ -151,29 +262,18 @@ class APIResponseError(ScrapeDoError):
     ):
         self.raw_response = raw_response
         self.raw_status_code = raw_response.status_code
-        self.message = f"Unknown API Error. Body: {raw_response.text}"
 
-        # Attempt to parse known JSON keys
-        try:
-            data = raw_response.json()
-            for key in ("detail",
-                        "Error",
-                        "errorMessage",
-                        "message",
-                        "Message"
-                        ):
-                if key in data and isinstance(data[key], str):
-                    self.message = data[key]
-                    break
-
-        except ValueError:
-            pass
+        error_info = ScrapeDoJSONErrorMessage.try_from_response(raw_response)
+        if error_info is not None:
+            self.message = str(error_info)
+        else:
+            self.message = (f"Unknown API Error\n"
+                            f"Status: {raw_response.status_code}\n"
+                            f"Body: {raw_response.text}"
+                            )
 
         super().__init__(
-            (
-                f"API returned an error."
-                f"Status: {self.raw_status_code} | Message: {self.message}"
-                ),
+            self.message,
             request,
             response
             )

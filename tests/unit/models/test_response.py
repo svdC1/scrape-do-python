@@ -198,8 +198,8 @@ class TestScrapeDoResponseValidation:
         "status_code, json_data, proxy_status_header, expected_is_proxy_error",
         [
             # JSON has explicit Scrape.do error keys -> True
-            (500, {"errorMessage": "Node failed"}, None, True),
-            (400, {"detail": "Invalid parameters"}, None, True),
+            (500, {"Message": ["Node failed"], "ErrorCode": 42}, None, True),
+            (400, {"PossibleCauses": ["Invalid params"]}, None, True),
             # JSON 'statusCode' matches raw status -> False
             (403, {"statusCode": 403, "content": "WAF"}, "403", False),
             # JSON 'statusCode' mismatches raw status -> True
@@ -443,3 +443,209 @@ class TestScrapeDoResponseSerialization:
         assert response.action_results is None
         assert response.screenshots is None
         assert response.frames is None
+
+
+class TestScrapeDoResponseReprAndSerialization:
+
+    @staticmethod
+    def test_repr_format(example_url):
+        """`__repr__` returns the angle-bracket shorthand with status
+        and proxy-error flag."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET"
+            )
+        http_resp = httpx.Response(200)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert repr(response) == (
+            f"<ScrapeDoResponse [Status: 200, "
+            f"Proxy Error: {response.is_proxy_error}]>"
+            )
+
+    @staticmethod
+    def test_str_falls_back_to_repr(example_url):
+        """`str()` should fall through to `__repr__` since `__str__`
+        isn't separately defined."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET"
+            )
+        http_resp = httpx.Response(200)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert str(response) == repr(response)
+
+    @staticmethod
+    def test_to_dict_includes_public_fields(example_url, mock_json_payload):
+        """`to_dict()` should expose every documented public property
+        of a populated response."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True,
+                ),
+            method="GET"
+            )
+        http_resp = httpx.Response(
+            200,
+            json=mock_json_payload,
+            headers={
+                "scrape.do-target-url": "https://example.com",
+                "scrape.do-request-id": "req-1",
+                "scrape.do-rid": "node-1",
+                "scrape.do-cookies": "a=1",
+                }
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        dumped = response.to_dict()
+
+        expected_keys = {
+            "target_status_code",
+            "text",
+            "target_headers",
+            "cookies",
+            "resolved_url",
+            "target_url",
+            "scrape_do_status_code",
+            "request_cost",
+            "remaining_credits",
+            "rid",
+            "rate",
+            "request_id",
+            "auth",
+            "initial_status_code",
+            "scrape_do_headers",
+            "is_proxy_error",
+            "frames",
+            "network_requests",
+            "websocket_requests",
+            "action_results",
+            "screenshots",
+            }
+        assert set(dumped.keys()) == expected_keys
+        assert dumped["target_url"] == "https://example.com"
+        assert dumped["request_id"] == "req-1"
+        assert dumped["rid"] == "node-1"
+
+    @staticmethod
+    def test_to_dict_excludes_raw_response_and_request(example_url):
+        """`to_dict()` must NOT leak the wrapped `httpx.Response` or
+        the `PreparedScrapeDoRequest` - both are non-serializable
+        helpers recoverable via the public attribute accessors."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET"
+            )
+        http_resp = httpx.Response(200)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        dumped = response.to_dict()
+
+        assert "httpx_response" not in dumped
+        assert "request" not in dumped
+        # Internal attribute names must not leak either.
+        assert all(not k.startswith("_") for k in dumped)
+
+    @staticmethod
+    def test_to_dict_recursively_serializes_nested_models(
+        example_url, mock_json_payload
+    ):
+        """Nested pydantic sub-models (frames, network_requests,
+        screenshots) are converted to dicts, not pydantic instances."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True,
+                ),
+            method="GET"
+            )
+        http_resp = httpx.Response(200, json=mock_json_payload)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        dumped = response.to_dict()
+
+        # Each nested list should be a list of plain dicts.
+        for key in (
+            "frames",
+            "network_requests",
+            "websocket_requests",
+            "action_results",
+            "screenshots",
+        ):
+            items = dumped[key]
+            assert items is not None and len(items) >= 1
+            assert all(isinstance(item, dict) for item in items)
+
+    @staticmethod
+    def test_to_dict_renders_empty_nested_lists_as_none(example_url):
+        """A response with no nested-model data should render those
+        slots as None rather than empty lists - matches how `frames`
+        etc. behave on the property accessors."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url, render=True, return_json=True
+                ),
+            method="GET"
+            )
+        http_resp = httpx.Response(
+            200, json={"statusCode": 200, "content": "<html>x</html>"}
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        dumped = response.to_dict()
+
+        for key in (
+            "frames",
+            "network_requests",
+            "websocket_requests",
+            "action_results",
+            "screenshots",
+        ):
+            assert dumped[key] is None
+
+    @staticmethod
+    def test_to_json_round_trips(example_url, mock_json_payload):
+        """`to_json()` -> json.loads should yield a dict equivalent to
+        `to_dict()` (modulo the `default=str` coercion for httpx URL /
+        bytes that don't have a native JSON shape)."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True,
+                ),
+            method="GET"
+            )
+        http_resp = httpx.Response(200, json=mock_json_payload)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        rendered = response.to_json()
+        parsed = json.loads(rendered)
+
+        # Keys must match.
+        assert set(parsed.keys()) == set(response.to_dict().keys())
+        # Top-level scalar fields round-trip identically.
+        assert parsed["scrape_do_status_code"] == (
+            response.scrape_do_status_code
+            )
+        assert parsed["is_proxy_error"] == response.is_proxy_error
+
+    @staticmethod
+    def test_to_json_respects_indent_override(example_url):
+        """User can override the default indent=2 by passing `indent`
+        explicitly."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET"
+            )
+        http_resp = httpx.Response(200)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        rendered = response.to_json(indent=None)
+
+        # indent=None produces no newlines, single-line output.
+        assert "\n" not in rendered
