@@ -1,101 +1,26 @@
-import logging
 import os
-import re
 import pytest
 from scrape_do.client import ScrapeDoClient
-from scrape_do.models import (
-    ScrapeDoResponse
-    )
-
-logger = logging.getLogger("integration_tests")
 
 pytestmark = pytest.mark.integration
 
 # Uses `go-httpbin`
 HTTPBIN_BASE = os.getenv("HTTPBIN_BASE", "https://httpbin.co")
 
-_TOKEN_RE = re.compile(r"(?i)([?&]token=)[^&]+")
-
-
-def _redact_token(url) -> str:
-    """Strip the `token=...` query parameter from a URL string."""
-    return _TOKEN_RE.sub(r"\1REDACTED", str(url))
-
 
 class TestLiveProxyErrorDetection:
     """
-    Verifies the SDK correctly traverses its error detection logic tree.
+    Verifies the SDK correctly traverses its error detection logic tree
+    against live Scrape.do gateway responses. The `response_trace`
+    fixture (defined in conftest.py) emits a structured log trace of
+    the full response surface and asserts `is_proxy_error` against the
+    expected value.
     """
-
-    def _validate_and_log_error_state(
-        self,
-        response: ScrapeDoResponse,
-        expected_is_proxy_error: bool
-    ):
-        """
-        Helper method to explicitly log and assert the decision tree of the
-        `is_proxy_error` property based on the raw HTTPX response.
-        """
-        raw_resp = response.httpx_response
-
-        logger.info("[Scrape.do Raw Response Trace]")
-        logger.info(f"Target URL: {response.target_url}")
-        logger.info(f"HTTPX Status: {raw_resp.status_code}")
-        logger.info(f"Raw Headers: {dict(raw_resp.headers)}")
-        logger.info(f"Raw Body (First 200 chars): {raw_resp.text[:200]}")
-
-        # JSON Parsability Check
-        is_json_parsable = False
-        parsed_json = {}
-        try:
-            parsed_json = raw_resp.json()
-            is_json_parsable = True
-        except Exception:
-            pass
-
-        logger.info(f"State Check -> JSON Parsable: {is_json_parsable}")
-
-        if is_json_parsable:
-            # JSON Key / Status Match Check
-            json_status = parsed_json.get("statusCode", "Missing")
-            logger.info(f"State Check -> JSON 'statusCode': {json_status}")
-
-            # Identify error keys
-            error_keys = [
-                "message",
-                "Error",
-                "detail",
-                "Message",
-                "errorMessage"
-                ]
-            has_error_keys = any(k in parsed_json for k in error_keys)
-            logger.info(
-                f"State Check -> Contains Error Keys: {has_error_keys}"
-                )
-
-            status_match = (json_status == raw_resp.status_code)
-            logger.info(
-                f"State Check -> JSON statusCode matches HTTPX status:"
-                f"{status_match}"
-                )
-        # Header Fallback Check
-        initial_status = raw_resp.headers.get(
-            "scrape.do-initial-status-code", "Missing"
-            )
-        logger.info(
-            f"State Check -> Header 'scrape.do-initial-status-code': "
-            f"{initial_status}"
-            )
-
-        logger.info(
-            f"SDK Conclusion -> is_proxy_error: {response.is_proxy_error}"
-            )
-
-        assert response.is_proxy_error is expected_is_proxy_error
 
     def test_target_rate_limit_logic(
         self,
-        no_retry_sync_client: ScrapeDoClient
+        no_retry_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Checks logic when the target explicitly rate-limits the proxy.
@@ -106,16 +31,13 @@ class TestLiveProxyErrorDetection:
             disable_retry=True,
             transparent_response=True
             )
-
         # Target error, proxy succeeded
-        self._validate_and_log_error_state(
-            response,
-            expected_is_proxy_error=False
-            )
+        response_trace(response, expected_is_proxy_error=False)
 
     def test_proxy_timeout_logic(
         self,
-        no_retry_sync_client: ScrapeDoClient
+        no_retry_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Checks logic when the proxy worker times out waiting for the target.
@@ -127,16 +49,13 @@ class TestLiveProxyErrorDetection:
             disable_retry=True,
             transparent_response=True
             )
-
         # True proxy error
-        self._validate_and_log_error_state(
-            response,
-            expected_is_proxy_error=True
-            )
+        response_trace(response, expected_is_proxy_error=True)
 
     def test_unroutable_domain_logic(
         self,
-        no_retry_sync_client: ScrapeDoClient
+        no_retry_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Checks logic when the proxy fails DNS resolution.
@@ -144,18 +63,15 @@ class TestLiveProxyErrorDetection:
         response = no_retry_sync_client.get(
             "http://this-domain-is-guaranteed-to-fail-12345.com"
             )
-
         # True proxy error
-        self._validate_and_log_error_state(
-            response,
-            expected_is_proxy_error=True
-            )
+        response_trace(response, expected_is_proxy_error=True)
 
     # --- Transparent Response Calls (Header-only logic) ---
 
     def test_transparent_target_error_logic(
         self,
-        no_retry_sync_client: ScrapeDoClient
+        no_retry_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Checks logic when transparentResponse=True.
@@ -166,16 +82,13 @@ class TestLiveProxyErrorDetection:
             super=True,
             disable_retry=True
         )
-
         # The target failed, not the proxy.
-        self._validate_and_log_error_state(
-            response,
-            expected_is_proxy_error=False
-            )
+        response_trace(response, expected_is_proxy_error=False)
 
     def test_transparent_proxy_timeout_logic(
         self,
-        no_retry_sync_client: ScrapeDoClient
+        no_retry_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Checks logic when transparentResponse=True but the proxy itself fails.
@@ -187,12 +100,8 @@ class TestLiveProxyErrorDetection:
             super=True,
             disable_retry=True
         )
-
         # The proxy timed out.
-        self._validate_and_log_error_state(
-            response,
-            expected_is_proxy_error=True
-            )
+        response_trace(response, expected_is_proxy_error=True)
 
 
 class TestLiveDataBoundaries:
@@ -203,7 +112,8 @@ class TestLiveDataBoundaries:
 
     def test_live_post_json_payload(
         self,
-        default_sync_client: ScrapeDoClient
+        default_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Ensures dictionary bodies are correctly serialized as JSON and
@@ -220,6 +130,7 @@ class TestLiveDataBoundaries:
             disable_retry=True,
             transparent_response=True
         )
+        response_trace(response)
 
         assert response.status_code == 200
 
@@ -231,7 +142,8 @@ class TestLiveDataBoundaries:
 
     def test_live_binary_file_download(
         self,
-        default_sync_client: ScrapeDoClient
+        default_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Ensures downloading images or files returns uncorrupted raw bytes.
@@ -244,6 +156,7 @@ class TestLiveDataBoundaries:
             disable_retry=True,
             transparent_response=True
             )
+        response_trace(response)
 
         assert response.status_code == 200
 
@@ -260,6 +173,7 @@ class TestLiveDataBoundaries:
     def test_live_cookie_injection(
         self,
         default_sync_client: ScrapeDoClient,
+        response_trace,
     ):
         """
         Ensures the `set_cookies` parameter correctly injects state into the
@@ -274,6 +188,7 @@ class TestLiveDataBoundaries:
             disable_retry=True,
             transparent_response=True
         )
+        response_trace(response)
 
         assert response.status_code == 200
 
