@@ -91,7 +91,10 @@ class TestScrapeDoResponseValidation:
         assert "Target Data" in response.text
 
     @staticmethod
-    def test_response_header_telemetry_extraction(example_url, mock_headers):
+    def test_response_header_telemetry_extraction(
+        example_url,
+        full_scrape_do_telemetry_headers
+    ):
         """
         Ensures Scrape.do telemetry is accurately parsed and typed from the
         headers.
@@ -99,7 +102,11 @@ class TestScrapeDoResponseValidation:
         req = PreparedScrapeDoRequest(
             api_params=RequestParameters(url=example_url)
             )
-        http_resp = httpx.Response(200, headers=mock_headers, text="Raw HTML")
+        http_resp = httpx.Response(
+            200,
+            headers=full_scrape_do_telemetry_headers,
+            text="Raw HTML"
+            )
         response = ScrapeDoResponse(request=req, response=http_resp)
 
         expected_target_headers = httpx.Headers(
@@ -115,7 +122,7 @@ class TestScrapeDoResponseValidation:
         expected_scrape_do_headers = httpx.Headers(
             {
                 "scrape.do-auth": "0",
-                "scrape.do-cookies": "cookie1=value1;cookie2=value2",
+                "scrape.do-cookies": "cookie1=value1; cookie2=value2",
                 "scrape.do-initial-status-code": "200",
                 "scrape.do-rate": "0:0",
                 "scrape.do-remaining-credits": "300000",
@@ -665,18 +672,16 @@ class TestObservationalURLFields:
 
     @pytest.mark.parametrize(
         "url",
-        [
-            # vanilla case, trailing slash
-            "https://example.com/",
-            # double `?` - the breaking pattern from the wild
-            "https://example.com/embed/abc?feature=oembed?wmode=transparent",
-            # double `?` + later `&` (mixed separators)
-            "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
-            # single `?`, single query param
-            "https://example.com/embed/ghi?wmode=transparent",
-            # proper `&`-separated multi-param (sanity)
-            "https://example.com/embed/jkl?a=1&b=2",
-            ]
+        ["https://example.com/",
+         # double `?` - the breaking pattern from the wild
+         "https://example.com/embed/abc?feature=oembed?wmode=transparent",
+         # double `?` + later `&` (mixed separators)
+         "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
+         # single `?`, single query param
+         "https://example.com/embed/ghi?wmode=transparent",
+         # proper `&`-separated multi-param (sanity)
+         "https://example.com/embed/jkl?a=1&b=2"
+         ]
         )
     @staticmethod
     def test_frame_accepts_quirky_urls(url):
@@ -686,13 +691,12 @@ class TestObservationalURLFields:
 
     @pytest.mark.parametrize(
         "url",
-        [
-            "https://example.com/",
-            "https://example.com/embed/abc?feature=oembed?wmode=transparent",
-            "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
-            "https://example.com/embed/ghi?wmode=transparent",
-            "https://example.com/embed/jkl?a=1&b=2",
-            ]
+        ["https://example.com/",
+         "https://example.com/embed/abc?feature=oembed?wmode=transparent",
+         "https://example.com/embed/def?feature=oembed?wmode=transparent&x=y",
+         "https://example.com/embed/ghi?wmode=transparent",
+         "https://example.com/embed/jkl?a=1&b=2"
+         ]
         )
     @staticmethod
     def test_network_request_accepts_quirky_urls(url):
@@ -701,3 +705,130 @@ class TestObservationalURLFields:
             url=url, method="GET", status=200
             )
         assert net_req.url == url
+
+
+class TestScrapeDoResponseEdgeCases:
+    """
+    Coverage-gap tests for branches that aren't reachable through the
+    typical happy-path / error-path setups. Each test targets a single
+    line or branch the broader suite doesn't otherwise exercise.
+    """
+
+    @staticmethod
+    def test_init_swallows_json_decode_error_on_returnjson_true(
+        example_url,
+    ):
+        """If Scrape.do crashes and returns HTML despite
+        `return_json=True`, the constructor swallows the JSONDecodeError
+        so `is_proxy_error` can still route the request correctly."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True,
+                ),
+            method="GET",
+            )
+        # Body is HTML even though the caller requested JSON.
+        http_resp = httpx.Response(
+            502, text="<html>Bad Gateway from upstream</html>"
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert response._parsed_json is None
+        # The crash routes as a proxy error - no initial-status header
+        # and no parseable envelope.
+        assert response.is_proxy_error is True
+
+    @staticmethod
+    def test_request_property_returns_original_request(example_url):
+        """`response.request` exposes the original
+        `PreparedScrapeDoRequest` instance verbatim (identity check)."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET",
+            )
+        http_resp = httpx.Response(200)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert response.request is req
+
+    @staticmethod
+    def test_cookies_uses_httpx_cookies_when_pure_cookies_true(
+        example_url,
+    ):
+        """With `pure_cookies=True`, the SDK returns the underlying
+        `httpx.Response.cookies` jar verbatim instead of parsing the
+        `scrape.do-cookies` header."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                pure_cookies=True,
+                ),
+            method="GET",
+            )
+        # httpx.Response.cookies needs a Request attached to walk the
+        # cookie jar; the SDK's own request fixture isn't an httpx one,
+        # so attach a minimal one matching the target URL.
+        http_resp = httpx.Response(
+            200,
+            headers={
+                # A real Set-Cookie header. httpx parses it into the
+                # response's own `cookies` jar.
+                "set-cookie": "session=abc123; Path=/",
+                # The scrape.do-cookies header is intentionally
+                # different so we can prove the pure_cookies branch
+                # ignored it.
+                "scrape.do-cookies": "different=ignored",
+                },
+            request=httpx.Request("GET", example_url),
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        cookies = response.cookies
+        # `pure_cookies=True` returned httpx's parsed Set-Cookie jar,
+        # NOT the scrape.do-cookies header value.
+        assert cookies is not None
+        assert dict(cookies) == {"session": "abc123"}
+
+    @staticmethod
+    def test_cookies_returns_none_on_unparseable_header(example_url):
+        """`scrape.do-cookies` header present but containing no
+        `key=value` pairs - the regex returns no matches, so the
+        property returns None rather than an empty `httpx.Cookies`."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(url=example_url),
+            method="GET",
+            )
+        http_resp = httpx.Response(
+            200,
+            headers={"scrape.do-cookies": "garbage no equals sign"},
+            )
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        assert response.cookies is None
+
+    @staticmethod
+    def test_json_raw_false_falls_back_when_envelope_lacks_content(
+        example_url,
+    ):
+        """`json(raw_response=False)` with a parsed envelope that has
+        no `content` key falls through to `httpx_response.json()`
+        rather than crashing on the missing key."""
+        req = PreparedScrapeDoRequest(
+            api_params=RequestParameters(
+                url=example_url,
+                render=True,
+                return_json=True,
+                ),
+            method="GET",
+            )
+        # Parseable JSON dict but no `content` key.
+        envelope = {"statusCode": 200, "frames": []}
+        http_resp = httpx.Response(200, json=envelope)
+        response = ScrapeDoResponse(request=req, response=http_resp)
+
+        # Falls back to httpx_response.json() which returns the
+        # envelope dict itself (not None, not a crash).
+        result = response.json(raw_response=False)
+        assert result == envelope

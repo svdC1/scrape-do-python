@@ -307,6 +307,15 @@ class TestScrapeDoJSONErrorMessage:
         assert "Error Code : 99" in rendered
         assert "Contact : support@scrape.do" in rendered
 
+    def test_str_with_empty_messages_renders_unknown(self):
+        """When `messages` is empty (envelope had no `Message` key,
+        or it was an empty list), `__str__` falls back to the
+        "Unknown API Error" placeholder rather than rendering an empty
+        joined string."""
+        err = ScrapeDoJSONErrorMessage(error_code=1)
+        rendered = str(err)
+        assert "Messages : Unknown API Error" in rendered
+
     def test_is_auth_throttle_positive(self, make_response):
         """Throttle phrase in messages -> True."""
         resp = make_response(

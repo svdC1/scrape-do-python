@@ -36,6 +36,11 @@ All notable changes to this project will be documented in this file.
 
 - `ScrapeDoFrame.url` and `ScrapeDoNetworkRequest.url` relaxed from `HttpUrl` to `str`. These fields report URLs that Scrape.do observed on the rendered target page; real-world iframes / network calls produce technically-valid-but-quirky URLs (e.g., embeds with `?feature=oembed?wmode=transparent`) that pydantic-core's URL parser rejected, blowing up the whole response parse. The outbound `RequestParameters.url` keeps `HttpUrl` since validation there is load-bearing.
 
+- `ScrapeDoResponse.cookies` regex no longer captures the structural whitespace after `; ` separators in the `scrape.do-cookies` header. The second-and-later cookie names previously came back with a phantom leading space (`{" user": "alice"}`). Captures themselves still preserve content verbatim.
+
+- `ScrapeDoResponse` constructor: removed a duplicated unguarded `response.json()` call that bypassed the surrounding `try / except ValueError`. When `return_json=True` and Scrape.do crashed and returned HTML instead, the constructor used to crash with `JSONDecodeError` before `is_proxy_error` could route the failure as a `ServerError`.
+
+- `RequestParameters.to_proxy_url` now double-encodes the param string. httpx transparently URL-decodes the proxy password during Basic auth header construction, so values with URL-reserved characters (notably the JSON-string `playWithBrowser` payload) used to arrive at Scrape.do unencoded and get fragmented by Scrape.do's `&` / `=` parser. Wrapping `urlencode`'s output in `quote(..., safe="=&")` preserves the key=value&key=value framing while escaping percent-encoded values one more time so httpx's single decode round-trips back to canonical single-encoded form. Surfaced by the proxy-mode render integration tests.
 
 ### Dependencies
 

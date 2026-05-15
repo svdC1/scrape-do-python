@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 class TestAsyncProxyClientInitialization:
 
-    async def test_missing_api_token_raises(self, mock_env_vars):
+    async def test_missing_api_token_raises(self):
         """
         Ensures that initializing the async proxy client without an API
         token raises a ValueError.
@@ -42,17 +42,14 @@ class TestAsyncProxyClientInitialization:
         async with AsyncScrapeDoProxyClient(retry_backoff=10) as client:
             assert client.api_token == "env_api_token"
 
-    async def test_api_token_from_arg(self, mock_env_vars):
+    async def test_api_token_from_arg(self):
         """
         Ensures the API token is correctly acquired from the argument.
         """
         async with AsyncScrapeDoProxyClient("arg_api_token") as client:
             assert client.api_token == "arg_api_token"
 
-    async def test_default_verify_uses_bundled_ca_context(
-        self,
-        mock_env_vars
-    ):
+    async def test_default_verify_uses_bundled_ca_context(self):
         """
         Ensures the async proxy client defaults `verify` to the
         bundled-CA SSL context — the key behavioral difference vs the
@@ -61,7 +58,7 @@ class TestAsyncProxyClientInitialization:
         async with AsyncScrapeDoProxyClient(api_token="test") as client:
             assert client._verify is DEFAULT_PROXY_SSL_CONTEXT
 
-    async def test_explicit_verify_overrides_default(self, mock_env_vars):
+    async def test_explicit_verify_overrides_default(self):
         """
         Ensures user-provided `verify` values are stored verbatim.
         """
@@ -77,14 +74,14 @@ class TestAsyncProxyClientInitialization:
         ) as client:
             assert client._verify is custom_ctx
 
-    async def test_default_max_pooled_clients(self, mock_env_vars):
+    async def test_default_max_pooled_clients(self):
         """
         Ensures the pool size defaults to 16.
         """
         async with AsyncScrapeDoProxyClient(api_token="test") as client:
             assert client.max_pooled_clients == 16
 
-    async def test_pool_starts_empty(self, mock_env_vars):
+    async def test_pool_starts_empty(self):
         """
         Ensures the client pool is empty at construction time —
         clients are created lazily inside `execute()`.
@@ -92,7 +89,7 @@ class TestAsyncProxyClientInitialization:
         async with AsyncScrapeDoProxyClient(api_token="test") as client:
             assert len(client._client_pool) == 0
 
-    async def test_pool_has_asyncio_lock(self, mock_env_vars):
+    async def test_pool_has_asyncio_lock(self):
         """
         Ensures the async proxy client owns an `asyncio.Lock` for the
         miss/eviction critical section.
@@ -100,20 +97,14 @@ class TestAsyncProxyClientInitialization:
         async with AsyncScrapeDoProxyClient(api_token="test") as client:
             assert isinstance(client._pool_lock, asyncio.Lock)
 
-    async def test_async_context_manager_enter_returns_self(
-        self,
-        mock_env_vars
-    ):
+    async def test_async_context_manager_enter_returns_self(self):
         """
         Ensures the async context manager returns the client instance.
         """
         async with AsyncScrapeDoProxyClient(api_token="test") as client:
             assert isinstance(client, AsyncScrapeDoProxyClient)
 
-    async def test_async_context_manager_exit_returns_false(
-        self,
-        mock_env_vars
-    ):
+    async def test_async_context_manager_exit_returns_false(self):
         """
         Ensures __aexit__ returns False so exceptions propagate.
         """
@@ -130,7 +121,6 @@ class TestAsyncProxyClientPool:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -152,7 +142,6 @@ class TestAsyncProxyClientPool:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -172,7 +161,6 @@ class TestAsyncProxyClientPool:
     @respx.mock
     async def test_pool_evicts_lru_when_full(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep
     ):
@@ -196,7 +184,6 @@ class TestAsyncProxyClientPool:
     @respx.mock
     async def test_pool_lru_touch_on_hit(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep
     ):
@@ -225,7 +212,6 @@ class TestAsyncProxyClientPool:
     @respx.mock
     async def test_aclose_drains_pool(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep,
         mocker
@@ -255,7 +241,6 @@ class TestAsyncProxyClientPool:
     @respx.mock
     async def test_async_context_manager_drains_pool_on_exit(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep
     ):
@@ -278,7 +263,6 @@ class TestAsyncProxyClientPool:
     @respx.mock
     async def test_concurrent_misses_on_same_url_dont_leak_clients(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep
     ):
@@ -324,7 +308,6 @@ class TestAsyncProxyClientRouting:
         self,
         request_kwargs,
         error_match,
-        mock_env_vars,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         mocker
     ):
@@ -341,7 +324,6 @@ class TestAsyncProxyClientRouting:
 
     async def test_get_routing(
         self,
-        mock_env_vars,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         mocker
     ):
@@ -362,7 +344,6 @@ class TestAsyncProxyClientRouting:
 
     async def test_post_routing(
         self,
-        mock_env_vars,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         mocker
     ):
@@ -383,7 +364,6 @@ class TestAsyncProxyClientRouting:
 
     async def test_post_forwards_session_validator(
         self,
-        mock_env_vars,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         mocker
     ):
@@ -433,7 +413,6 @@ class TestAsyncProxyClientRouting:
     async def test_request_param_valid_config(
         self,
         request_kwargs,
-        mock_env_vars,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         mocker
     ):
@@ -475,7 +454,6 @@ class TestAsyncProxyClientExecutionEngine:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -497,7 +475,6 @@ class TestAsyncProxyClientExecutionEngine:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -522,7 +499,6 @@ class TestAsyncProxyClientExecutionEngine:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -544,7 +520,6 @@ class TestAsyncProxyClientExecutionEngine:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -563,7 +538,6 @@ class TestAsyncProxyClientExecutionEngine:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -592,7 +566,6 @@ class TestAsyncProxyClientSessionValidator:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -617,7 +590,6 @@ class TestAsyncProxyClientSessionValidator:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -639,7 +611,6 @@ class TestAsyncProxyClientSessionValidator:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -663,7 +634,6 @@ class TestAsyncProxyClientEventHooks:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -690,7 +660,6 @@ class TestAsyncProxyClientEventHooks:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -711,7 +680,6 @@ class TestAsyncProxyClientEventHooks:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -744,7 +712,6 @@ class TestAsyncProxyClientEventHooks:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -765,7 +732,6 @@ class TestAsyncProxyClientEventHooks:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -803,7 +769,6 @@ class TestAsyncProxyClientRequestOverrides:
     @respx.mock
     async def test_callable_backoff_on_network_error(
         self,
-        mock_env_vars,
         make_request,
         mock_async_sleep
     ):
@@ -840,7 +805,6 @@ class TestAsyncProxyClientRequestOverrides:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -868,7 +832,6 @@ class TestAsyncProxyClientRequestOverrides:
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -895,7 +858,6 @@ class TestAsyncProxyClientRequestOverrides:
         self,
         mock_async_proxy_client: AsyncScrapeDoProxyClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """

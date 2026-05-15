@@ -467,8 +467,10 @@ class ScrapeDoClient:
                     else:
                         time.sleep(float(self.retry_backoff))
 
-            # max_retries < 0
-            raise RuntimeError(
+            # max_retries < 0 - defensive, unreachable for any
+            # non-negative `max_retries` (the for-loop always either
+            # returns inside or raises on the final RequestError).
+            raise RuntimeError(  # pragma: no cover
                 "Execution loop exhausted without returning a response."
                 )
         finally:

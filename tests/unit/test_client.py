@@ -17,11 +17,12 @@ pytestmark = pytest.mark.unit
 
 class TestClientInitialization:
 
-    def test_missing_api_token_raises(self, mock_env_vars):
+    def test_missing_api_token_raises(self):
         """
         Ensures that initializing the client without an API token
-        raises a ValueError. Environment variables are cleared
-        via the `mock_env_vars` pytest fixture.
+        raises a ValueError. `SCRAPE_DO_API_KEY` is cleared from the
+        environment by the autouse `_clear_api_token_env` fixture in
+        conftest.py.
         """
 
         with pytest.raises(
@@ -40,14 +41,14 @@ class TestClientInitialization:
         with ScrapeDoClient(retry_backoff=10) as client:
             assert client.api_token == "env_api_token"
 
-    def test_api_token_from_arg(self, mock_env_vars):
+    def test_api_token_from_arg(self):
         """
         Ensures that API token is correctly acquired from argument
         """
         with ScrapeDoClient("arg_api_token") as client:
             assert client.api_token == "arg_api_token"
 
-    def test_httpx_client_default_values(self, mock_env_vars):
+    def test_httpx_client_default_values(self):
         """
         Ensures that all keyword arguments to the underlying `httpx.Client`
         instance are passed down correctly
@@ -76,7 +77,7 @@ class TestClientInitialization:
             assert not transport._pool._http2
             assert transport._pool._max_connections == 50
 
-    def test_default_timeout_is_60_seconds(self, mock_env_vars):
+    def test_default_timeout_is_60_seconds(self):
         """
         Ensures the SDK's default timeout (60s across all phases) overrides
         httpx's 5s default to comfortably accommodate proxy round-trips.
@@ -88,7 +89,7 @@ class TestClientInitialization:
             assert timeout.write == 60.0
             assert timeout.pool == 60.0
 
-    def test_explicit_close(self, mock_env_vars, mocker):
+    def test_explicit_close(self, mocker):
         """
         Ensures calling client.close() delegates to the httpx.Client
         """
@@ -98,7 +99,7 @@ class TestClientInitialization:
         client.close()
         spy_close.assert_called_once()
 
-    def test_context_manager_enter(self, mock_env_vars):
+    def test_context_manager_enter(self):
         """
         Ensures the context manager returns the client instance
         """
@@ -106,7 +107,7 @@ class TestClientInitialization:
             assert isinstance(client, ScrapeDoClient)
             assert client.api_token == "test"
 
-    def test_context_manager_exit_returns_false(self, mock_env_vars):
+    def test_context_manager_exit_returns_false(self):
         """
         Ensures __exit__ returns False to signal exceptions are not swallowed.
         """
@@ -116,7 +117,6 @@ class TestClientInitialization:
 
     def test_context_manager_closes_underlying_client(
         self,
-        mock_env_vars,
         mocker
     ):
         """
@@ -166,7 +166,6 @@ class TestClientRouting:
         self,
         request_kwargs,
         error_match,
-        mock_env_vars,
         mock_sync_client: ScrapeDoClient
     ):
         """
@@ -218,7 +217,6 @@ class TestClientRouting:
     def test_request_param_valid_config(
         self,
         request_kwargs,
-        mock_env_vars,
         mock_sync_client: ScrapeDoClient
     ):
         """
@@ -252,7 +250,6 @@ class TestClientRouting:
 
     def test_get_routing(
         self,
-        mock_env_vars,
         mock_sync_client: ScrapeDoClient
     ):
         """
@@ -272,7 +269,6 @@ class TestClientRouting:
 
     def test_post_routing(
         self,
-        mock_env_vars,
         mock_sync_client: ScrapeDoClient
     ):
         """
@@ -298,7 +294,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -322,7 +317,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -349,7 +343,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -376,7 +369,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -398,7 +390,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -426,7 +417,6 @@ class TestClientExecutionEngine:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -452,7 +442,6 @@ class TestClientExecutionEngine:
         make_request,
         mocker,
         mock_sleep,
-        mock_env_vars
     ):
         """
         Ensures specific timeout and extensions overrides are passed to HTTPX.
@@ -484,7 +473,6 @@ class TestClientExecutionEngine:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -512,7 +500,6 @@ class TestClientSessionValidator:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -542,7 +529,6 @@ class TestClientSessionValidator:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -565,7 +551,6 @@ class TestClientSessionValidator:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -587,7 +572,6 @@ class TestClientSessionValidator:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -611,7 +595,6 @@ class TestClientEventHooks:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -639,7 +622,6 @@ class TestClientEventHooks:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -661,7 +643,6 @@ class TestClientEventHooks:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -685,7 +666,6 @@ class TestClientEventHooks:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -720,7 +700,6 @@ class TestClientEventHooks:
         mock_sync_client: ScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_sleep
     ):
         """
@@ -752,7 +731,6 @@ class TestClientEventHooks:
         self,
         mock_sync_client: ScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_sleep
     ):
         """

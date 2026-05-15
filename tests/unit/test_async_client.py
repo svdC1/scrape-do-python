@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 class TestAsyncClientInitialization:
 
-    async def test_missing_api_token_raises(self, mock_env_vars):
+    async def test_missing_api_token_raises(self):
         """
         Ensures that initializing the async client without an API token
         raises a ValueError.
@@ -39,14 +39,14 @@ class TestAsyncClientInitialization:
         async with AsyncScrapeDoClient(retry_backoff=10) as client:
             assert client.api_token == "env_api_token"
 
-    async def test_api_token_from_arg(self, mock_env_vars):
+    async def test_api_token_from_arg(self):
         """
         Ensures that API token is correctly acquired from argument
         """
         async with AsyncScrapeDoClient("arg_api_token") as client:
             assert client.api_token == "arg_api_token"
 
-    async def test_httpx_client_default_values(self, mock_env_vars):
+    async def test_httpx_client_default_values(self):
         """
         Ensures that all keyword arguments to the underlying
         `httpx.AsyncClient` instance are passed down correctly.
@@ -76,7 +76,7 @@ class TestAsyncClientInitialization:
             assert not transport._pool._http2
             assert transport._pool._max_connections == 50
 
-    async def test_default_timeout_is_60_seconds(self, mock_env_vars):
+    async def test_default_timeout_is_60_seconds(self):
         """
         Ensures the SDK's default timeout (60s across all phases) overrides
         httpx's 5s default to comfortably accommodate proxy round-trips.
@@ -88,7 +88,7 @@ class TestAsyncClientInitialization:
             assert timeout.write == 60.0
             assert timeout.pool == 60.0
 
-    async def test_explicit_aclose(self, mock_env_vars, mocker):
+    async def test_explicit_aclose(self, mocker):
         """
         Ensures calling client.aclose() delegates to the httpx.AsyncClient.
         """
@@ -98,7 +98,7 @@ class TestAsyncClientInitialization:
         await client.aclose()
         spy_aclose.assert_called_once()
 
-    async def test_async_context_manager_enter(self, mock_env_vars):
+    async def test_async_context_manager_enter(self):
         """
         Ensures the async context manager returns the client instance.
         """
@@ -106,10 +106,7 @@ class TestAsyncClientInitialization:
             assert isinstance(client, AsyncScrapeDoClient)
             assert client.api_token == "test"
 
-    async def test_async_context_manager_exit_returns_false(
-        self,
-        mock_env_vars
-    ):
+    async def test_async_context_manager_exit_returns_false(self):
         """
         Ensures __aexit__ returns False to signal exceptions are not
         swallowed.
@@ -120,7 +117,6 @@ class TestAsyncClientInitialization:
 
     async def test_async_context_manager_closes_underlying_client(
         self,
-        mock_env_vars,
         mocker
     ):
         """
@@ -171,7 +167,6 @@ class TestAsyncClientRouting:
         self,
         request_kwargs,
         error_match,
-        mock_env_vars,
         mock_async_client: AsyncScrapeDoClient,
         mocker
     ):
@@ -224,7 +219,6 @@ class TestAsyncClientRouting:
     async def test_request_param_valid_config(
         self,
         request_kwargs,
-        mock_env_vars,
         mock_async_client: AsyncScrapeDoClient,
         mocker
     ):
@@ -259,7 +253,6 @@ class TestAsyncClientRouting:
 
     async def test_get_routing(
         self,
-        mock_env_vars,
         mock_async_client: AsyncScrapeDoClient,
         mocker
     ):
@@ -283,7 +276,6 @@ class TestAsyncClientRouting:
 
     async def test_post_routing(
         self,
-        mock_env_vars,
         mock_async_client: AsyncScrapeDoClient,
         mocker
     ):
@@ -307,7 +299,6 @@ class TestAsyncClientRouting:
 
     async def test_post_forwards_session_validator(
         self,
-        mock_env_vars,
         mock_async_client: AsyncScrapeDoClient,
         mocker
     ):
@@ -341,7 +332,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -364,7 +354,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -391,7 +380,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -417,7 +405,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -439,7 +426,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -466,7 +452,6 @@ class TestAsyncClientExecutionEngine:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -491,7 +476,6 @@ class TestAsyncClientExecutionEngine:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -522,7 +506,6 @@ class TestAsyncClientExecutionEngine:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -552,7 +535,6 @@ class TestAsyncClientSessionValidator:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -582,7 +564,6 @@ class TestAsyncClientSessionValidator:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -609,7 +590,6 @@ class TestAsyncClientSessionValidator:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -631,7 +611,6 @@ class TestAsyncClientSessionValidator:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -655,7 +634,6 @@ class TestAsyncClientEventHooks:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -683,7 +661,6 @@ class TestAsyncClientEventHooks:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -706,7 +683,6 @@ class TestAsyncClientEventHooks:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -730,7 +706,6 @@ class TestAsyncClientEventHooks:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -765,7 +740,6 @@ class TestAsyncClientEventHooks:
         mock_async_client: AsyncScrapeDoClient,
         make_request,
         mocker,
-        mock_env_vars,
         mock_async_sleep
     ):
         """
@@ -797,7 +771,6 @@ class TestAsyncClientEventHooks:
         self,
         mock_async_client: AsyncScrapeDoClient,
         make_request,
-        mock_env_vars,
         mock_async_sleep
     ):
         """

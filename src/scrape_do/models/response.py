@@ -280,7 +280,6 @@ class ScrapeDoResponse:
         # JSON Parsing
         self._parsed_json: Optional[Dict[str, Any]] = None
         if self._is_json:
-            parsed = response.json()
             try:
                 parsed = response.json()
                 if isinstance(parsed, dict):
