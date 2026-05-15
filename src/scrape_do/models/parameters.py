@@ -966,6 +966,18 @@ class RequestParameters(BaseModel):
         # Strip `url` from parameters
         api_params.pop("url", None)
 
-        param_string = urllib.parse.urlencode(api_params)
+        # Double-encode the param string. httpx transparently URL-decodes
+        # the proxy password before placing it in the Basic auth header,
+        # so values with URL-reserved characters (e.g. the JSON-string
+        # `playWithBrowser` value) would arrive at Scrape.do unencoded
+        # and get re-parsed as a fragmented query string. The outer
+        # `quote(..., safe="=&")` preserves the key=value&key=value
+        # framing while escaping `%` (and any other special chars urlencode
+        # produced) so httpx's single decode round-trips back to the
+        # canonical single-encoded form Scrape.do expects.
+        param_string = urllib.parse.quote(
+            urllib.parse.urlencode(api_params),
+            safe="=&",
+            )
 
         return f"http://{{api_token}}:{param_string}@proxy.scrape.do:8080"

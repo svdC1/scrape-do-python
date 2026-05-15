@@ -726,8 +726,10 @@ class ScrapeDoResponse:
 
         cookies = self._raw_response.headers.get("scrape.do-cookies")
         if cookies:
-            # Parse Cookies (c1=v1;c2=v2;...)
-            pattern = re.compile(r"([^=;]+)=([^;]*)")
+            # Parse Cookies (c1=v1; c2=v2; ...).
+            # Scrape.do uses the standard cookie serialization shape
+            # with `; ` (semicolon + space) between pairs.
+            pattern = re.compile(r"\s*([^=;]+)=([^;]*)(?:;|$)")
             matches = re.findall(pattern, cookies)
             if not matches:
                 return None

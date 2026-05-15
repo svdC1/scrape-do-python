@@ -636,8 +636,14 @@ class TestProxyModeSerialization:
     def test_to_proxy_url_format_safe_with_browser_actions(example_url):
         """
         Regression: browser-action JSON payloads contain `{` and `}`
-        characters. urlencode must percent-encode them so the template's
-        .format() doesn't mistake them for additional placeholders.
+        characters. The param string must be encoded so the template's
+        `.format()` doesn't mistake them for additional placeholders.
+
+        The encoding is intentionally double-pass so that httpx's
+        URL-decode of the proxy password (during Basic auth header
+        construction) leaves the value still URL-encoded for Scrape.do
+        to parse. Concretely: a raw `{` becomes `%7B` after urlencode,
+        then `%257B` after the outer quote() pass.
         """
         params = RequestParameters(
             url=example_url,
@@ -654,9 +660,14 @@ class TestProxyModeSerialization:
         # leaked {selector} or similar.
         finalized = template.format(api_token="TOKEN")
         assert "TOKEN" in finalized
-        # Encoded brace bodies survive
-        assert "%7B" in finalized or "%7b" in finalized  # `{`
-        assert "%7D" in finalized or "%7d" in finalized  # `}`
+        # No raw `{` or `}` survive into the finalized string outside
+        # of the now-substituted {api_token} placeholder.
+        rest = finalized.replace("TOKEN", "")
+        assert "{" not in rest
+        assert "}" not in rest
+        # Double-encoded brace bodies present
+        assert "%257B" in finalized or "%257b" in finalized  # `{`
+        assert "%257D" in finalized or "%257d" in finalized  # `}`
 
     @staticmethod
     def test_set_cookies_without_explicit_custom_headers_raises(
