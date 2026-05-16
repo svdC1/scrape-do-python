@@ -10,9 +10,9 @@ on:
 
 jobs:
   # ---------------------------------------------------------
-  # Code Quality & Testing (Runs on every push/PR)
+  # Lint & Type-Check (3.13 only)
   # ---------------------------------------------------------
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -35,17 +35,42 @@ jobs:
       - name: Strict Type Checking with Mypy
         run: mypy src/
 
+  # ---------------------------------------------------------
+  # Unit Tests (matrix across every supported Python version)
+  # ---------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
       - name: Run tests
         run: pytest tests/unit/ --cov --junitxml=junit.xml
 
       - name: Upload Coverage To Codecov
+        if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
         with:
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload Test Results To Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.python-version == '3.13' }}
         uses: codecov/codecov-action@v5
         with:
           flags: unit
@@ -57,7 +82,7 @@ jobs:
   # ---------------------------------------------------------
   publish:
     name: Publish to PyPI
-    needs: test
+    needs: [lint, test]
     if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
     

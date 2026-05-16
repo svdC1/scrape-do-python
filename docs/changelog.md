@@ -48,6 +48,22 @@
 
 - Added [`typing_extensions>=4.0`](https://typing-extensions.readthedocs.io/) as a direct runtime dependency.
 
+### Tests
+
+- Integration test logging restructured. Pytest hooks emit `---> START` / `<--- PASS|FAIL|SKIPPED` boundaries tagged with `nodeid`; format collapsed from 4-line-per-entry blocks to single lines prefixed with `[<nodeid>]` driven by a [`ContextVar`][contextvars.ContextVar] + [`logging.Filter`][logging.Filter]. The `_validate_and_log_error_state` helper (previously duplicated across two test files and absent from the two proxy ones) consolidated into a `response_trace` fixture in `tests/integration/conftest.py`; the helper now uses [`ScrapeDoJSONErrorMessage.try_from_response`][scrape_do.exceptions.ScrapeDoJSONErrorMessage.try_from_response] instead of the stale hardcoded error-key list (`message` / `Error` / `detail` / `errorMessage` / `Message`).
+
+- Integration coverage expanded from 22 → ~60 tests across all four client variants. New classes: `TestLiveResponseParsing` (every telemetry property, target-vs-scrape-do header filtering, cookie extraction, [`to_dict`][scrape_do.models.response.ScrapeDoResponse.to_dict] serialization), `TestLiveRenderEnvelope` (one full render + `return_json=true` smoke test per client), `TestLiveExceptionRouting` (bad-token → [`AuthenticationError`][scrape_do.exceptions.AuthenticationError], transparent 4xx → [`TargetError`][scrape_do.exceptions.TargetError], transparent 429 → [`TargetError(is_throttled=True)`][scrape_do.exceptions.TargetError], live [`ScrapeDoJSONErrorMessage`][scrape_do.exceptions.ScrapeDoJSONErrorMessage] schema check). Five missing parity tests added per proxy client.
+
+- Unit test fixtures refactored. `mock_env_vars` (referenced 137× purely to clear `SCRAPE_DO_API_KEY`) renamed to `_clear_api_token_env` and made autouse function-scoped, removing all explicit references. `mock_headers` renamed to `full_scrape_do_telemetry_headers` with a new `telemetry_headers_subset` factory. `make_response` expanded with `scrape_do_headers` / `target_headers` kwargs. New `make_scrape_do_response(status_code, request_kwargs=None, **response_kwargs)` factory yields a ready-to-assert [`ScrapeDoResponse`][scrape_do.models.response.ScrapeDoResponse] in one call. Fixtures reorganized by section (helpers → factories → autouse env → time mocks → sync → async).
+
+- [`models/response.py`][scrape_do.models.response] lifted to 100% line coverage (was 97.04%). New tests cover the [`JSONDecodeError`][json.JSONDecodeError] swallow path when `return_json=true` returns HTML, the `request` property's identity passthrough, the `pure_cookies=True` jar branch, the unparseable `scrape.do-cookies` header → `None` branch, and the `json(raw_response=False)` envelope-without-`content` fallback. [`exceptions.py`][scrape_do.exceptions] empty-`messages` branch on [`ScrapeDoJSONErrorMessage.__str__`][scrape_do.exceptions.ScrapeDoJSONErrorMessage] also covered.
+
+- `# pragma: no cover` annotation on the unreachable `raise RuntimeError("Execution loop exhausted...")` fallthrough at the bottom of every client's `execute()` loop. Unreachable for any non-negative `max_retries` — the for-loop always returns inside or raises on the final [`RequestError`][httpx.RequestError].
+
+### CI
+
+- `ci.yml` split into two jobs: `lint` (ruff + mypy, Python 3.13 only) and `test` (unit tests across a Python `3.9` / `3.10` / `3.11` / `3.12` / `3.13` matrix with `fail-fast: false`). Codecov uploads gated on `matrix.python-version == '3.13'` to avoid 5× duplicate submissions. `publish` job now gated on both `lint` and `test` so all five Python versions must pass before PyPI publishes. `docs.yml` and `integration_tests.yml` stay pinned to `3.13`.
+
 ## `0.2.0` — 2026-05-12
 
 ### Added

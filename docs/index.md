@@ -23,8 +23,8 @@ pip install scrape-do-python
 ```
 
 ???+ note "Requires Python 3.9+"
-    - CI runs on Python `3.13`
-    - Earlier `3.9` – `3.12` are supported but not tested yet
+    - Unit tests run on a matrix of Python `3.9` / `3.10` / `3.11` / `3.12` / `3.13`
+    - Lint, type-checking, and integration tests run on `3.13`
 
 ---
 

@@ -18,7 +18,8 @@ pip install -e .[dev]
 
 ???+ note "Python Versions"
     - Requires Python `3.9+`
-    - CI runs on `3.13`
+    - Unit tests run on a matrix of `3.9` / `3.10` / `3.11` / `3.12` / `3.13`
+    - Lint, type-checking, and integration tests run on `3.13`
 
 ---
 
